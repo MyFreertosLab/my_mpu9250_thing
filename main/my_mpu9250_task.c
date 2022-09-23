@@ -110,11 +110,6 @@ void my_mpu9250_task(void *arg) {
 	// Init MPU9250
 	ESP_ERROR_CHECK(mpu9250_init(mpu9250_handle));
 
-	// Calibration
-	// calibration offset and biases
-//	ESP_ERROR_CHECK(mpu9250_calibrate(mpu9250_cal_handle));
-//	ESP_ERROR_CHECK(mpu9250_save_calibration_data(mpu9250_cal_handle));
-
 	// load circular buffer
 	for(uint8_t i = 0; i < CIRCULAR_BUFFER_SIZE; i++) {
 		if( ulTaskNotifyTake( pdTRUE,xMaxBlockTime ) == 1) {

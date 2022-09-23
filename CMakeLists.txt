@@ -3,4 +3,8 @@
 cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(app-template)
+
+# Include drivers
+set(EXTRA_COMPONENT_DIRS components/drivers)
+
+project(my_mpu9250_thing)

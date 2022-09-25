@@ -31,7 +31,20 @@
 static const char *MY_MPU9250_TAG = "my_mpu9250";
 #define HOST_IP "192.168.1.64"
 #define HOST_PORT 65432
+#define BUFF_LEN 128
 
+#define MY_MPU9250_SENSORS_MSG_CONFIG_START "<CN>"
+#define MY_MPU9250_SENSORS_MSG_CONFIG_END "</CN>"
+#define MY_MPU9250_SENSORS_MSG_RAW_DATA_START "<RW>"
+#define MY_MPU9250_SENSORS_MSG_RAW_DATA_END "</RW>"
+
+typedef struct {
+	uint8_t accel_fsr;
+	uint8_t gyro_fsr;
+	uint8_t mag_precision;
+	uint8_t mag_drdy;
+	uint16_t frequenzy_hz;
+} mpu9250_config_data_t;
 
 esp_err_t my_mpu9250_init_flash(){
     esp_err_t err = nvs_flash_init();
@@ -80,6 +93,30 @@ static esp_err_t mpu9250_discard_messages(mpu9250_handle_t mpu9250_handle, uint1
 	return ESP_OK;
 }
 
+static esp_err_t mpu9250_send_message(int sock, char* data, char* buff, uint8_t data_len, const char* tag_start, const char* tag_end) {
+	uint8_t tag_start_len = strlen(tag_start);
+	uint8_t tag_end_len = strlen(tag_end);
+
+	// clean buffer
+	memset(buff, 0, BUFF_LEN);
+	// set start tag for data
+	strcpy(buff, tag_start);
+	// copy data to send
+	memcpy(buff+tag_start_len, buff, data_len);
+	// set end tag for data
+	strcpy(buff+tag_start_len+data_len, tag_end);
+	// send data
+	int err = send(sock, buff,
+			data_len+tag_start_len+tag_end_len, 0);
+
+	if (err < 0) {
+		ESP_LOGE(MY_MPU9250_TAG,
+				"Error occurred during sending: errno %d", errno);
+		return ESP_FAIL;
+	}
+	return ESP_OK;
+}
+
 void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 	const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 500 );
 
@@ -90,6 +127,15 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 	ESP_ERROR_CHECK(mpu9250_discard_messages(mpu9250_handle, 10000));
 
     int sock =  -1;
+    mpu9250_config_data_t config_data = {
+    		.accel_fsr = mpu9250_handle->data.accel.fsr,
+    		.gyro_fsr = mpu9250_handle->data.gyro.fsr,
+    		.mag_precision = mpu9250_handle->data.mag.precision,
+    		.mag_drdy = mpu9250_handle->data.mag.drdy,
+			.frequenzy_hz = 500
+    };
+
+	char buff[BUFF_LEN];
     while(true) {
     	while(true) {
     	    char host_ip[] = HOST_IP;
@@ -117,6 +163,7 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     		}
     	    ESP_LOGI(MY_MPU9250_TAG, "Successfully connected");
 
+    	    // read/send cycle
     		uint32_t counter = 0;
     		while (true) {
     			counter++;
@@ -127,12 +174,13 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     					printf("Gyro .: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_z);
     					printf("Accel : [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.accel_data_x, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_y, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_z);
     					printf("Mag ..: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.mag_data_x, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_y, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_z);
+        				esp_err_t res = mpu9250_send_message(sock, (char*)&config_data, buff, sizeof(mpu9250_config_data_t), MY_MPU9250_SENSORS_MSG_CONFIG_START, MY_MPU9250_SENSORS_MSG_CONFIG_END);
+        				if(res != ESP_OK) {
+        					break;
+        				}
     				}
-    				int err = send(sock, &mpu9250_handle->data.raw_data.data_s_xyz,
-    						sizeof(mpu9250_raw_data_t), 0);
-    				if (err < 0) {
-    					ESP_LOGE(MY_MPU9250_TAG,
-    							"Error occurred during sending: errno %d", errno);
+    				esp_err_t res = mpu9250_send_message(sock, (char*)&mpu9250_handle->data.raw_data.data_s_xyz, buff, sizeof(mpu9250_raw_data_t), MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
+    				if(res != ESP_OK) {
     					break;
     				}
     		    } else {

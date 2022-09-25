@@ -102,7 +102,7 @@ static esp_err_t mpu9250_send_message(int sock, char* data, char* buff, uint8_t 
 	// set start tag for data
 	strcpy(buff, tag_start);
 	// copy data to send
-	memcpy(buff+tag_start_len, buff, data_len);
+	memcpy(buff+tag_start_len, data, data_len);
 	// set end tag for data
 	strcpy(buff+tag_start_len+data_len, tag_end);
 	// send data

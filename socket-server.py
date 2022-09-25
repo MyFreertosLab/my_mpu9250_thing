@@ -1,47 +1,107 @@
-# echo-server.py
+# socket-server.py
 
+import ctypes
+import struct
 import socket
+import threading
+from queue import Queue
 
-HOST = "192.168.1.64"  # Standard loopback interface address (localhost)
+HOST = "192.168.1.64"  
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
+raw_data_queue = Queue(maxsize = 1000)
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+class RawDataFields(ctypes.Structure):
+    _fields_ = [
+        ("ax",   ctypes.c_short),
+        ("ay",   ctypes.c_short),
+        ("az",   ctypes.c_short),
+        ("temp_data",   ctypes.c_short),
+        ("gx",   ctypes.c_short),
+        ("gy",   ctypes.c_short),
+        ("gz",   ctypes.c_short),
+        ("mx",   ctypes.c_short),
+        ("my",   ctypes.c_short),
+        ("mz",   ctypes.c_short),
+        ("ext_1",   ctypes.c_short),
+        ("ext_2",   ctypes.c_short),
+        ("ext_3",   ctypes.c_short),
+        ("ext_4",   ctypes.c_short),
+        ("ext_5",   ctypes.c_short),
+        ("ext_6",   ctypes.c_short),
+        ("ext_7",   ctypes.c_short),
+        ("ext_8",   ctypes.c_short),
+        ("ext_9",   ctypes.c_short),
+    ]
+
+
+def parse_raw_data_payload(raw_data):
+  fmt = "<hhhhhhhhhhhhhhhhhhh"
+  fmt_size = struct.calcsize(fmt)
+  k = RawDataFields();
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9 = struct.unpack(fmt, raw_data[:fmt_size])
+  print("[{:d} {:d} {:d}]".format(k.ax, k.ay, k.az))
+
+def raw_data_renderer_function(name, in_queue):
+    max_qsize = 0
+    while True:
+      payload = in_queue.get()
+      if len(payload) != 38:
+          continue
+      parse_raw_data_payload(payload)
+      if in_queue.qsize() > max_qsize:
+        max_qsize = in_queue.qsize()
+        print("payload len={} size{}".format(len(payload), max_qsize))
+
+def socket_receiver_function(name, out_queue):
+  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.bind((HOST, PORT))
     s.listen()
     conn, addr = s.accept()
     with conn:
         print(f"Connected by {addr}")
+        data_prev = ''.encode()
         while True:
-            data = ''.encode()
-            data1 = conn.recv(1024)
-            if not data1:
+            data_curr = conn.recv(1024)
+            if not data_curr:
                 break
-            data = data + data1
+            data = data_prev + data_curr
             rl = len(data)
             start_pos = 0
             end_pos = 0
             while(start_pos < rl):
               end_pos = start_pos+4
-              prefix = data[start_pos:end_pos].decode()
-              if prefix == "<RW>":
-                 suffix = '</RW>'
-              elif prefix == "<CN>":
-                 suffix = '</CN>'
-              print("1. start={}, end={}, prefix={}, suffix={}".format(start_pos, end_pos, prefix, suffix))
-
-              start_pos = end_pos
-              end_pos=data[start_pos:].find(suffix.encode())+start_pos
-              if end_pos < start_pos:
-                 data=data[start_pos:]
+              prefix = data[start_pos:end_pos]
+              if prefix == "<RW>".encode():
+                 suffix = '</RW>'.encode()
+              elif prefix == "<CN>".encode():
+                 suffix = '</CN>'.encode()
+              else:
+                 print("Wrong Prefix! {}".format(prefix))
+                 data_prev = ''.encode()
                  break
 
-              rw_record = data[start_pos:end_pos]
-              suffix=data[end_pos:end_pos+5].decode()
-              print("2. start={}, end={}, prefix={}, suffix={}".format(start_pos, end_pos, prefix, suffix))
+              payload_start_pos = end_pos
+              end_pos=data[payload_start_pos:].find(suffix)+payload_start_pos
+              if end_pos < payload_start_pos:
+                 data_prev=data[start_pos:]
+                 break
+              payload = data[payload_start_pos:end_pos]
+              
+              suffix=data[end_pos:end_pos+5]
 
+              suffix_start_pos = end_pos
+              end_pos = suffix_start_pos + 5
+              suffix=data[suffix_start_pos:end_pos]
+              rwl=len(payload)
+              out_queue.put(payload)
               start_pos = end_pos
-              end_pos = start_pos + 5
-              suffix=data[start_pos:end_pos].decode()
-              rwl=len(rw_record)
-              print("3. start={}, end={}, prefix={}, suffix={}, rwlen={}, len={}".format(start_pos, end_pos, prefix, suffix, rwl, rl))
-              start_pos = end_pos+1
+              data_prev = ''.encode()
+
+
+if __name__ == "__main__":
+    rd = threading.Thread(target=raw_data_renderer_function, args=("raw_data_renderer",raw_data_queue, ))
+    rd.start()
+    sr = threading.Thread(target=socket_receiver_function, args=("receiver",raw_data_queue, ))
+    sr.start()
+    sr.join()
+    

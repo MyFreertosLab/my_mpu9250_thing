@@ -5,10 +5,14 @@ import struct
 import socket
 import threading
 from queue import Queue
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
 HOST = "192.168.1.64"  
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 raw_data_queue = Queue(maxsize = 1000)
+HIST_BINS = np.linspace(-4, 4, 1000)
 
 class RawDataFields(ctypes.Structure):
     _fields_ = [
@@ -39,18 +43,21 @@ def parse_raw_data_payload(raw_data):
   fmt_size = struct.calcsize(fmt)
   k = RawDataFields();
   k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9 = struct.unpack(fmt, raw_data[:fmt_size])
-  print("[{:d} {:d} {:d}]".format(k.ax, k.ay, k.az))
+  return k
 
 def raw_data_renderer_function(name, in_queue):
     max_qsize = 0
+    data = np.zeros((1000,10), dtype=np.int16)
     while True:
       payload = in_queue.get()
       if len(payload) != 38:
           continue
-      parse_raw_data_payload(payload)
+      k = parse_raw_data_payload(payload)
+      record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz], dtype=np.int16)
+      data = np.concatenate([data[1:,:], [record]])
       if in_queue.qsize() > max_qsize:
         max_qsize = in_queue.qsize()
-        print("payload len={} size{}".format(len(payload), max_qsize))
+        print("payload len={} size={}".format(len(payload), max_qsize))
 
 def socket_receiver_function(name, out_queue):
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

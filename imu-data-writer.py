@@ -7,6 +7,7 @@ import threading
 from queue import Queue
 import numpy as np
 import csv
+from numpy import dtype
 
 HOST = "192.168.1.64"  
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
@@ -48,7 +49,7 @@ def raw_data_renderer_function(name, in_queue):
     data = np.zeros((1000,10), dtype=np.int16)
     
     with open("imu-data.csv", "w") as file:
-      writer = csv.writer(file, delimiter = ',', dialect='unix')
+      writer = csv.writer(file, delimiter = ',')
       record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ']
       writer.writerow(record)
       while True:
@@ -56,7 +57,7 @@ def raw_data_renderer_function(name, in_queue):
         if len(payload) != 38:
           continue
         k = parse_raw_data_payload(payload)
-        record = [k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz]
+        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz], dtype=np.int16)
         writer.writerow(record)
 
 def socket_receiver_function(name, out_queue):

@@ -12,7 +12,8 @@ import matplotlib.animation as animation
 HOST = "192.168.1.64"  
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 raw_data_queue = Queue(maxsize = 1000)
-HIST_BINS = np.linspace(-4, 4, 1000)
+HIST_BINS = np.linspace(-400, 400, 800)
+plot_data = np.zeros((1000,10), dtype=np.int16)
 
 class RawDataFields(ctypes.Structure):
     _fields_ = [
@@ -44,6 +45,25 @@ def parse_raw_data_payload(raw_data):
   k = RawDataFields();
   k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9 = struct.unpack(fmt, raw_data[:fmt_size])
   return k
+  
+def prepare_animation(bar_container, in_queue):
+
+    def animate(frame_number):
+        # load data from queue
+        while not in_queue.empty():
+          payload = in_queue.get()
+          if len(payload) != 38:
+            continue
+          k = parse_raw_data_payload(payload)
+          record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz], dtype=np.int16)
+          plot_data[:,:] = np.concatenate([plot_data[1:,:], [record]])
+        
+        n, _ = np.histogram(plot_data[:,0], HIST_BINS)
+        for count, rect in zip(n, bar_container.patches):
+            rect.set_height(count)
+            
+        return bar_container.patches
+    return animate
 
 def raw_data_renderer_function(name, in_queue):
     max_qsize = 0
@@ -106,9 +126,14 @@ def socket_receiver_function(name, out_queue):
 
 
 if __name__ == "__main__":
-    rd = threading.Thread(target=raw_data_renderer_function, args=("raw_data_renderer",raw_data_queue, ))
-    rd.start()
+    fig, ax = plt.subplots()
+    _, _, bar_container = ax.hist(plot_data[:,1], HIST_BINS, lw=1, ec="yellow", fc="green", alpha=0.5)
+    ax.set_ylim(top=55)  # set safe limit to ensure that all data is visible.
+    ani = animation.FuncAnimation(fig, prepare_animation(bar_container, raw_data_queue), None, repeat=False, blit=True)
+    #rd = threading.Thread(target=raw_data_renderer_function, args=("raw_data_renderer",raw_data_queue, ))
+    #rd.start()
     sr = threading.Thread(target=socket_receiver_function, args=("receiver",raw_data_queue, ))
     sr.start()
-    sr.join()
+    #sr.join()
+    plt.show()
     

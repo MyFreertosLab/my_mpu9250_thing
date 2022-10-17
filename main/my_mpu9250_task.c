@@ -38,6 +38,11 @@ static const char *MY_MPU9250_TAG = "my_mpu9250";
 #define MY_MPU9250_SENSORS_MSG_RAW_DATA_START "<RW>"
 #define MY_MPU9250_SENSORS_MSG_RAW_DATA_END "</RW>"
 
+typedef struct my_raw_data_s {
+	mpu9250_raw_data_t data;
+	uint8_t mag_data_drdy;
+} mpu9250_raw_message_t;
+
 typedef struct {
 	uint8_t accel_fsr;
 	uint8_t gyro_fsr;
@@ -165,7 +170,9 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 
     	    // read/send cycle
     		uint32_t counter = 0;
+    		mpu9250_raw_message_t raw_message;
     		while (true) {
+        		memset(&raw_message, 0, sizeof(mpu9250_raw_message_t));
     			counter++;
     			if( ulTaskNotifyTake( pdTRUE,xMaxBlockTime ) == 1) {
     				counter %= 100;
@@ -179,7 +186,11 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
         					break;
         				}
     				}
-    				esp_err_t res = mpu9250_send_message(sock, (char*)&mpu9250_handle->data.raw_data.data_s_xyz, buff, sizeof(mpu9250_raw_data_t), MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
+    				// copy data to send
+    				memcpy((char*)&raw_message.data, (char*)&mpu9250_handle->data.raw_data.data_s_xyz, sizeof(mpu9250_raw_data_t));
+    				raw_message.mag_data_drdy = mpu9250_handle->data.mag.drdy;
+
+    				esp_err_t res = mpu9250_send_message(sock, (char*)&raw_message, buff, sizeof(mpu9250_raw_message_t), MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
     				if(res != ESP_OK) {
     					break;
     				}

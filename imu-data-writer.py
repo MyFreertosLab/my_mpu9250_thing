@@ -34,14 +34,16 @@ class RawDataFields(ctypes.Structure):
         ("ext_7",   ctypes.c_short),
         ("ext_8",   ctypes.c_short),
         ("ext_9",   ctypes.c_short),
+        ("mag_drdy",   ctypes.c_uint8),
+        ("dummy",   ctypes.c_uint8),
     ]
 
 
 def parse_raw_data_payload(raw_data):
-  fmt = "<hhhhhhhhhhhhhhhhhhh"
+  fmt = "<hhhhhhhhhhhhhhhhhhhBB"
   fmt_size = struct.calcsize(fmt)
   k = RawDataFields();
-  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9 = struct.unpack(fmt, raw_data[:fmt_size])
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9, k.mag_drdy, k.dummy = struct.unpack(fmt, raw_data[:fmt_size])
   return k
   
 def raw_data_renderer_function(name, in_queue):
@@ -50,14 +52,14 @@ def raw_data_renderer_function(name, in_queue):
     
     with open("imu-data.csv", "w") as file:
       writer = csv.writer(file, delimiter = ',')
-      record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ']
+      record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV']
       writer.writerow(record)
       while True:
         payload = in_queue.get()
-        if len(payload) != 38:
+        if len(payload) != 40:
           continue
         k = parse_raw_data_payload(payload)
-        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz], dtype=np.int16)
+        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.mag_drdy], dtype=np.int16)
         writer.writerow(record)
 
 def socket_receiver_function(name, out_queue):

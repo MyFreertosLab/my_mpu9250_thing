@@ -36,14 +36,15 @@ class RawDataFields(ctypes.Structure):
         ("ext_7",   ctypes.c_short),
         ("ext_8",   ctypes.c_short),
         ("ext_9",   ctypes.c_short),
+        ("mag_drdy",   ctypes.c_uint8),
     ]
 
 
 def parse_raw_data_payload(raw_data):
-  fmt = "<hhhhhhhhhhhhhhhhhhh"
+  fmt = "<hhhhhhhhhhhhhhhhhhhB"
   fmt_size = struct.calcsize(fmt)
   k = RawDataFields();
-  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9 = struct.unpack(fmt, raw_data[:fmt_size])
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9, k.mag_drdy = struct.unpack(fmt, raw_data[:fmt_size])
   return k
   
 def prepare_animation(bar_container, in_queue):

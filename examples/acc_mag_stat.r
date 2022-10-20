@@ -82,17 +82,142 @@ U=matrix(c(1, 0, 0, 0, 0, 0, 0, 0, 0,
            0, 0, 0, 0, 0, 1/sqrt(2), 0, 1/sqrt(2), 0,
            0, 0, 0, 0, 0, 0, 0, 0, 1), nrow=6, ncol=9)
 
-# Symmetric Kronecker Product
+# Implementazione di Symmetric Kronecker Product per n=3
 U=matrix(c(1, 0, 0, 0, 0, 0, 0, 0, 0,
            0, 1, 0, 1, 0, 0, 0, 0, 0,
            0, 0, 1, 0, 0, 0, 1, 0, 0,
            0, 0, 0, 0, 1, 0, 0, 0, 0,
            0, 0, 0, 0, 0, 1, 0, 1, 0,
            0, 0, 0, 0, 0, 0, 0, 0, 1), nrow=6, ncol=9, byrow = TRUE)
-U %*% kronecker(matrix(X[1,1:3]),matrix(X[1,1:3]))
+xk=U %*% kronecker(matrix(X[1,1:3]),matrix(X[1,1:3]))
 xtAx=t(xk) %*% matrix(vechMat(A))
 y=c(xk, X[1,1:3], 1)
 psiOls=matrix(y) %*% t(matrix(y))
+Uno <- matrix(c(1,1,1,1))
+Indx <- matrix(c(1,2,3,0))
+M = matrix(c(vechMat(Indx %*% t(Uno)), vechMat(Uno %*% t(Indx))), ncol = 2, byrow = FALSE)
+
+########################################################################
+## Algorithms for adjusted least squares estimation
+########################################################################
+###############################
+## Step 1): Form Tensor T 5xnxm
+###############################
+t0 <- function(x, variance) {
+   1
+}
+t1 <- function(x, variance) {
+  x
+}
+t2 <- function(x, variance) {
+  x^2 - variance
+}
+t3 <- function(x, variance) {
+  x^3 - 3*x*variance
+}
+t4 <- function(x, variance) {
+  x^4 - 3*x^2*variance + 3*variance^2
+}
+T <- function(k, i, l, X, variance) {
+    stopifnot(k >= 0 && k <= 4)
+    res=switch(as.integer(k+1), t0(X[l,i], variance), t1(X[l,i], variance),t2(X[l,i], variance),t3(X[l,i], variance),t4(X[l,i], variance))
+    as.double(res)
+}
+###############################
+## Step 2): Define index matrix
+###############################
+make_index_matrix <- function(n) {
+  Uno <- matrix(rep(1,n+1))
+  Indx <- matrix(c(c(1:n),0))
+  matrix(c(vechMat(Indx %*% t(Uno)), vechMat(Uno %*% t(Indx))), ncol = 2, byrow = FALSE)
+}
+#####################################
+## Step 3): Form Tensor R 
+#####################################
+is_equal <- function(v1, v2) {
+  as.integer(v1 == v2)
+}
+M <- make_index_matrix(3)
+R <- function(p,q,i, M) {
+  is_equal(M[p,1], i) + is_equal(M[p,2], i)  + is_equal(M[q,1], i)  + is_equal(M[q,2], i) 
+}
+#####################################
+## Step 4): Compute ni_als
+#####################################
+ni_als <- function(p,q,X,variance,M) {
+   m = dim(X)[1]
+   n = dim(X)[2]
+   s = 0
+   for(l in 1:m) {
+     f = 1
+     for(i in 1:n) {
+       f = f*T(R(p,q,i,M),i,l,X,variance)
+     }
+     s = s + f
+   }
+   s
+}
+#####################################
+## Step 5): Define index off-diagonal
+#####################################
+index_off_diagonal <- function(n) {
+  D1 <- seq(1,(n+1)*n/2)
+  D2 <- seq(1,n)*(seq(1,n)+1)/2
+  setdiff(D1, D2)
+}
+
+#####################################
+## Step 6): form matrix psi_als
+#####################################
+make_psi_als <- function(X,variance,M) {
+  n = dim(X)[2]
+  n1 = dim(M)[1]
+  D = index_off_diagonal(n)
+  psi_als = matrix(nrow = n1, ncol = n1)
+  for(p in 1:n1) {
+    for(q in p:n1) {
+      if(is.element(p,D) && is.element(q,D)) {
+        psi_als[p,q] = 4*ni_als(p,q,X,variance, M)
+      } else if(!is.element(p,D) && !is.element(q,D)) {
+        psi_als[p,q] = ni_als(p,q,X,variance, M)
+      } else {
+        psi_als[p,q] = 2*ni_als(p,q,X,variance, M)
+      }
+      psi_als[q,p] = psi_als[p,q]
+    }
+  }
+  psi_als
+}
+
+################################################
+## Step 7)8): Find eigenvector of min eigenvalue
+################################################
+calc_eigenvector_psi_als <- function(psi_als) {
+  eigen_als = eigen(psi_als)
+  eigen_values = eigen_als$values
+  eigen_vectors = eigen_als$vectors 
+  idx = which.min(eigen_values)
+  beta = matrix(eigen_vectors[, idx])
+  beta/norm(beta)
+}
+################################################
+## Step 9): Estimate A, b, d
+################################################
+estimate_A <- function(beta, n) {
+  xpndMat(beta[1:(n*(n+1)/2)])
+}
+estimate_b <- function(beta, n) {
+  beta[(n*(n+1)/2+1):(dim(beta)[1]-1)]
+}
+estimate_d <- function(beta, n) {
+  beta[dim(beta)[1]]
+}
+estimate_Ae <- function(A,c,d) {
+
+}
+estimate_c <- function(A,b) {
+
+}
 
 # T.B.D
 Q=AE

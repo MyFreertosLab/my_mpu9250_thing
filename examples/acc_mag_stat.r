@@ -13,11 +13,12 @@ library(mvmeta)
 
 imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
 
-centerY = mean(imu.data.body$MX)
-centerX = mean(imu.data.body$MY)
-centerZ = -mean(imu.data.body$MZ)
+#centerY = mean(imu.data.body$MX)
+#centerX = mean(imu.data.body$MY)
+#centerZ = -mean(imu.data.body$MZ)
 
 imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ) %>% mutate(MX = (MX -centerX), MY = (MY - centerY), MZ = (MZ - centerZ))
+#imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
 
 #acc_mag_cos <-(imu.data.body$AX*imu.data.body$MX + imu.data.body$AY*imu.data.body$MY + imu.data.body$AZ*imu.data.body$MZ)/(sqrt(imu.data.body$AX**2 + imu.data.body$AY**2 + imu.data.body$AZ**2)*sqrt(imu.data.body$MX**2 + imu.data.body$MY**2 + imu.data.body$MZ**2))
 #T = c(1:1:length(acc_mag_cos))
@@ -89,8 +90,14 @@ U=matrix(c(1, 0, 0, 0, 0, 0, 0, 0, 0,
            0, 0, 0, 0, 1, 0, 0, 0, 0,
            0, 0, 0, 0, 0, 1, 0, 1, 0,
            0, 0, 0, 0, 0, 0, 0, 0, 1), nrow=6, ncol=9, byrow = TRUE)
-xk=U %*% kronecker(matrix(X[1,1:3]),matrix(X[1,1:3]))
+symm_kronecker <- function(A,B,U) {
+  U %*% kronecker(A,B)
+}
+x=matrix(X[1,1:3])
+xk=symm_kronecker(x,x, U)
 xtAx=t(xk) %*% matrix(vechMat(A))
+t(x)%*%A%*%x
+xtAx
 y=c(xk, X[1,1:3], 1)
 psiOls=matrix(y) %*% t(matrix(y))
 Uno <- matrix(c(1,1,1,1))
@@ -188,6 +195,7 @@ make_psi_als <- function(X,variance,M) {
   }
   psi_als
 }
+psi_als = make_psi_als(X, 315.70,make_index_matrix(3))
 
 ################################################
 ## Step 7)8): Find eigenvector of min eigenvalue
@@ -212,12 +220,88 @@ estimate_b <- function(beta, n) {
 estimate_d <- function(beta, n) {
   beta[dim(beta)[1]]
 }
+estimate_c <- function(A,b,n) {
+  c=-0.5*solve(estimate_A(psi_als,n))%*%estimate_b(psi_als,n)
+}
 estimate_Ae <- function(A,c,d) {
-
+   as.double((1/(t(c) %*% A %*% c - d)))*A
 }
-estimate_c <- function(A,b) {
+estimate_all <- function(psi_als, n) {
+  beta = calc_eigenvector_psi_als(psi_als)
+  A=estimate_A(beta, n)
+  b=estimate_b(beta, n)
+  d=estimate_d(beta, n)
+  c=estimate_c(A, b, n)
+  Ae=estimate_Ae(A,c,d)
 
+  als = {}
+  als$A=A
+  als$b=b
+  als$d=d
+  als$c=c
+  als$Ae=Ae
+  
+  v1=matrix(eigen(Ae)$vectors[,1])
+  v2=matrix(eigen(Ae)$vectors[,2])
+  v3=matrix(eigen(Ae)$vectors[,3])
+  
+  l1=as.double(eigen(Ae)$values[1])
+  l2=as.double(eigen(Ae)$values[2])
+  l3=as.double(eigen(Ae)$values[3])
+
+  print("autovalori pre")
+  print(l1)
+  print(l2)
+  print(l3)
+  if(l1 < 0 || l2 < 0 || l3 < 0) {
+    Ae2 = matrix(rep(0,n*n), nrow = n, ncol=n)
+    if(l1>0) {
+      Ae2 = Ae2 + l1*(v1%*%t(v1))
+      print("l1")
+    }
+     if(l2>0) {
+      Ae2 = Ae2 + l2*(v2%*%t(v2))
+      print("l2")
+    }
+    if(l3>0) {
+      Ae2 = Ae2 + l3*(v3%*%t(v3))
+      print("l3")
+    }
+    als$Ae = Ae2
+  }  
+  l1=as.double(eigen(als$Ae)$values[1])
+  l2=as.double(eigen(als$Ae)$values[2])
+  l3=as.double(eigen(als$Ae)$values[3])
+  
+  print("autovalori post")
+  print(l1)
+  print(l2)
+  print(l3)
+  als
 }
+
+als=estimate_all(psi_als, 3)
+
+for(i in 1:(dim(X)[1])) {
+  x=matrix(X[i,1:3])
+  val=as.double(t(x)%*%als$A%*%x+t(als$b)%*%x+als$d)
+  if(val > 0) {
+    print(val)
+  }
+}
+
+for(i in 1:(dim(X)[1])) {
+  x=matrix(X[i,1:3])-matrix(als$c)
+  val=as.double(t(x)%*%als$Ae%*%x)
+  if(val < 0) {
+    print(val)
+  }
+}
+Ae_eigen_values=matrix(eigen(als$Ae)$values)
+a=sqrt(as.double(abs(1/Ae_eigen_values[1,1])))
+b=sqrt(as.double(abs(1/Ae_eigen_values[2,1])))
+c=sqrt(as.double(abs(1/Ae_eigen_values[3,1])))
+
 
 # T.B.D
 Q=AE

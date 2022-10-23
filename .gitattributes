@@ -31,3 +31,4 @@
 *.xls     binary
 *.doc     binary
 *.scan    binary
+*.png     binary

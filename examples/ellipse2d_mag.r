@@ -71,7 +71,7 @@ C
 # plot before translation
 open3d()
 plot3d(imu.data.body, col = "blue")
-spheres3d(c(0,0,0), radius = 228.5675, col = "red", alpha = 0.4)
+spheres3d(c(0,0,0), radius = 229.1845, col = "red", alpha = 0.4)
 # apply translation
 imu.data.body <- imu.data.body %>% mutate(MX = MX - C[1],MY = MY - C[2],MZ = MZ - C[3])
 imu.data.body.original <- imu.data.body.original %>% mutate(MX = MX - C[1],MY = MY - C[2],MZ = MZ - C[3])
@@ -79,13 +79,13 @@ imu.data.body.original <- imu.data.body.original %>% mutate(MX = MX - C[1],MY = 
 # plot after translation
 open3d()
 plot3d(imu.data.body, col = "blue")
-spheres3d(c(0,0,0), radius = 228.5675, col = "red", alpha = 0.4)
+spheres3d(c(0,0,0), radius = 229.1845, col = "red", alpha = 0.4)
 
 # Rotation
 imu.data.body.rotated <- imu.data.body %>% mutate(multiplication= as.matrix(imu.data.body[,]) %*% V) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
 open3d()
 plot3d(imu.data.body.rotated, col = "blue")
-spheres3d(c(0,0,0), radius = 228.5675, col = "red", alpha = 0.4)
+spheres3d(c(0,0,0), radius = 229.1845, col = "red", alpha = 0.4)
 
 scatter3D(imu.data.body.rotated$MX, imu.data.body.rotated$MY, imu.data.body.rotated$MZ, colvar = imu.data.body.rotated$MZ, col = NULL, add = FALSE)
 plotrgl()
@@ -106,7 +106,7 @@ coeff_rotated.hat <- coef(fit_rotated)
 ellipsoid_axis = matrix(0,3,3)
 diag(ellipsoid_axis) <- c(sqrt(1/coeff_rotated.hat[1]),sqrt(1/coeff_rotated.hat[2]),sqrt(1/coeff_rotated.hat[3]))
 scale_factors_rotated = matrix(0,3,3)
-sphere_radius = mean(diag(ellipsoid_axis))
+sphere_radius = sqrt(mean(diag(ellipsoid_axis)^2))
 diag(scale_factors_rotated) <- sphere_radius/diag(ellipsoid_axis)
 
 # plot sphere
@@ -119,9 +119,10 @@ spheres3d(c(0,0,0), radius = sphere_radius, col = "red", alpha = 0.4)
 #plotrgl()
 #rglwidget()
 
-# apply scale factors to original data translated
-scale_factors = V %*% scale_factors_rotated %*% t(V)
-imu.data.mag.sphere <- imu.data.body %>% mutate(MX = MX, MY = MY, MZ = MZ) %>% mutate(multiplication= as.matrix(imu.data.body[,]) %*% scale_factors) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
+# return to original space (from rotated)
+#scale_factors = V %*% scale_factors_rotated %*% t(V)
+#imu.data.mag.sphere <- imu.data.body %>% mutate(multiplication=  as.matrix(imu.data.body[,]) %*% scale_factors) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
+imu.data.mag.sphere <- imu.data.mag.sphere %>% mutate(multiplication= as.matrix(imu.data.mag.sphere[,]) %*% t(V)) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
 open3d()
 plot3d(imu.data.mag.sphere, col = "blue")
 spheres3d(c(0,0,0), radius = sphere_radius, col = "yellow", alpha = 0.4)

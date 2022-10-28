@@ -79,17 +79,17 @@ imu.data.body.original <- imu.data.body.original %>% mutate(MX = MX - C[1],MY = 
 # plot after translation
 open3d()
 plot3d(imu.data.body, col = "blue")
-spheres3d(c(0,0,0), radius = 246.9439, col = "red", alpha = 0.4)
+spheres3d(c(0,0,0), radius = 228.5675, col = "red", alpha = 0.4)
 
 # Rotation
 imu.data.body.rotated <- imu.data.body %>% mutate(multiplication= as.matrix(imu.data.body[,]) %*% V) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
 open3d()
 plot3d(imu.data.body.rotated, col = "blue")
-spheres3d(c(0,0,0), radius = 246.9439, col = "red", alpha = 0.4)
+spheres3d(c(0,0,0), radius = 228.5675, col = "red", alpha = 0.4)
 
-#scatter3D(imu.data.body.rotated$MX, imu.data.body.rotated$MY, imu.data.body.rotated$MZ, colvar = imu.data.body.rotated$MZ, col = NULL, add = FALSE)
-#plotrgl()
-#rglwidget()
+scatter3D(imu.data.body.rotated$MX, imu.data.body.rotated$MY, imu.data.body.rotated$MZ, colvar = imu.data.body.rotated$MZ, col = NULL, add = FALSE)
+plotrgl()
+rglwidget()
 
 # calc yaw pitch roll
 pitch=asin(-V[3,1])
@@ -120,7 +120,7 @@ spheres3d(c(0,0,0), radius = sphere_radius, col = "red", alpha = 0.4)
 #rglwidget()
 
 # apply scale factors to original data translated
-scale_factors = V%*%scale_factors_rotated %*% t(V)
+scale_factors = V %*% scale_factors_rotated %*% t(V)
 imu.data.mag.sphere <- imu.data.body %>% mutate(MX = MX, MY = MY, MZ = MZ) %>% mutate(multiplication= as.matrix(imu.data.body[,]) %*% scale_factors) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
 open3d()
 plot3d(imu.data.mag.sphere, col = "blue")

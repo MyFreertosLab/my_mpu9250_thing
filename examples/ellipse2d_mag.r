@@ -182,24 +182,30 @@ mag_model_b = -1/2*solve(mag_model_Q)%*%mag_model_u
 appo = mag_model_Q %*% t(mag_model_Q)
 appo_eigen = eigen(appo)
 mag_model_V = appo_eigen$vectors
-mag_model_D = matrix(0,3,3)
-diag(mag_model_D) <- appo_eigen$values
-mag_model_magnetic_norm = t(mag_model_u) %*% solve(mag_model_Q) %*% mag_model_u -4*mag_model_k # definire Hm^2 norma del campo magentico terrestre locale. Il valore è fittizio.
-mag_model_inv_A = sqrtm(mag_model_Q)
+mag_model_D = diag(eigen(mag_model_Q)$values)
+mag_model_magnetic_norm = t(mag_model_b)%*%mag_model_Q%*%mag_model_b - mag_model_k 
+mag_model_alpha = -as.double(4*mag_model_magnetic_norm/(4*mag_model_k - t((t(mag_model_V)%*%mag_model_u))%*%solve(mag_model_D)%*%(t(mag_model_V)%*%mag_model_u)))
+mag_model_B = mag_model_V %*% sqrt(mag_model_alpha*mag_model_D) %*% t(mag_model_V) # the same of sqrtm(mag_model_Q)
+mag_model_inv_A = mag_model_B 
 mag_model_A = solve(mag_model_inv_A)
 mag_model_data_transformed <- mag_model_data
+
+#######################################################################
+### T.B.D. Trovare qui i fattori di scala per normalizzare gli assi
+### mag_model_magnetic_norm risuta: 3.076837. 
+###    sqrt(mag_model_magnetic_norm) corrisponde al raggio medio dell'ellissoide
+### devo normalizzare?
+#######################################################################
 
 ##### T.B.D: L'algoritmo richiede un secondo passaggio per calcolare scale_factors_3 ed applicarlo alla trasformazione
 #####        affinché sia realmente sferico
 for(i in 1:dim(mag_model_data)[1]) {
-  mag_model_data_transformed[i,] = scale_factors_3 %*% mag_model_inv_A %*% t(mag_model_data[i,] - t(mag_model_b))
+  mag_model_data_transformed[i,] = (mag_model_inv_A %*% t(mag_model_data[i,] - t(mag_model_b)))
 }
-
-radius_data <- sqrt(as.matrix(mag_model_data_transformed[,1]^2)+as.matrix(mag_model_data_transformed[,2]^2)+as.matrix(mag_model_data_transformed[,3]^2))
 
 open3d()
 points3d(mag_model_data_transformed, col = "blue")
-spheres3d(c(0,0,0), radius = 1.803740, col = "red", alpha = 0.4)
+spheres3d(c(0,0,0), radius = as.double(sqrt(mag_model_magnetic_norm)), col = "red", alpha = 0.4)
 mag_model_data_transformed <- as.data.frame(mag_model_data_transformed)
 scatter3D(mag_model_data_transformed$MX, mag_model_data_transformed$MY, mag_model_data_transformed$MZ, colvar = mag_model_data_transformed$MZ, col = NULL, add = FALSE)
 plotrgl()
@@ -215,14 +221,15 @@ sphere_axis
 
 ## T.B.D: after the first estimation I need to calculate the scale_factors. Why? 
 ## T.B.D: the radius of sphere
-#ellipsoid_axis = matrix(0,3,3)
-#c1=sqrt(1/coeff_spheric2.hat[1])
-#c2=sqrt(1/coeff_spheric2.hat[2])
-#c3=sqrt(1/coeff_spheric2.hat[3])
+ellipsoid_axis = matrix(0,3,3)
+c1=sqrt(1/coeff_spheric2.hat[1])
+c2=sqrt(1/coeff_spheric2.hat[2])
+c3=sqrt(1/coeff_spheric2.hat[3])
 
-#diag(ellipsoid_axis) <- (1/((c1*c2*c3)^(2/3)))*c(c2*c3,c1*c3,c1*c2)
-#scale_factors_3 = matrix(0,3,3)
-#diag(scale_factors_3) <- diag(ellipsoid_axis)
-#sphere_radius = (c1*c2*c3)^(1/3)
-#scale_factors_3
+diag(ellipsoid_axis) <- (1/((c1*c2*c3)^(2/3)))*c(c2*c3,c1*c3,c1*c2)
+sphere_radius = sqrt(t(matrix(diag(ellipsoid_axis))) %*% matrix(diag(ellipsoid_axis)))
+scale_factors_3 = matrix(0,3,3)
+diag(scale_factors_3) <- diag(ellipsoid_axis)/as.double(sphere_radius)
+scale_factors_3
 #sphere_radius
+mean(radius_data)

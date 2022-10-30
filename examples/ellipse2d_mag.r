@@ -112,8 +112,8 @@ c3=sqrt(1/coeff_rotated.hat[3])
 
 diag(ellipsoid_axis) <- (1/((c1*c2*c3)^(2/3)))*c(c2*c3,c1*c3,c1*c2)
 scale_factors_rotated = matrix(0,3,3)
-diag(scale_factors_rotated) <- diag(ellipsoid_axis)
-sphere_radius = (c1*c2*c3)^(1/3)
+sphere_radius = sqrt(t(matrix(diag(ellipsoid_axis))) %*% matrix(diag(ellipsoid_axis)))
+diag(scale_factors_rotated) <- diag(ellipsoid_axis)/as.double(sphere_radius)
 # plot sphere
 imu.data.mag.sphere <- imu.data.body.rotated %>% mutate(multiplication= as.matrix(imu.data.body.rotated[,]) %*% scale_factors_rotated) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
 open3d()
@@ -141,8 +141,8 @@ c3=sqrt(1/coeff_spheric.hat[3])
 
 diag(ellipsoid_axis) <- (1/((c1*c2*c3)^(2/3)))*c(c2*c3,c1*c3,c1*c2)
 scale_factors_2 = matrix(0,3,3)
-diag(scale_factors_2) <- diag(ellipsoid_axis)
-sphere_radius = (c1*c2*c3)^(1/3)
+sphere_radius = sqrt(t(matrix(diag(ellipsoid_axis))) %*% matrix(diag(ellipsoid_axis)))
+diag(scale_factors_2) <- diag(ellipsoid_axis)/as.double(sphere_radius)
 
 # plot sphere
 imu.data.mag.sphere <- imu.data.mag.sphere  %>% mutate(multiplication= as.matrix(imu.data.mag.sphere [,]) %*% scale_factors_2) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
@@ -159,11 +159,12 @@ imu.data.mag.poly <- imu.data.mag.sphere %>% select(MX, MY, MZ) %>% mutate(One =
 fit_spheric <- lm(One ~ . - 1, imu.data.mag.poly)
 coeff_spheric2.hat <- coef(fit_spheric)
 sphere_axis=sqrt(1/coeff_spheric2.hat )
-stopifnot((sphere_axis - c(sphere_radius, sphere_radius, sphere_radius) < 1e-12 ))
+stopifnot((sphere_axis[1] -  sphere_axis[2] < 1e-10 ))
+stopifnot((sphere_axis[1] -  sphere_axis[3] < 1e-10 ))
 scale_factors_1
 scale_factors_2
-
 scale_factors_final=scale_factors_2%*%scale_factors_1
+sphere_radius = sqrt(t(scale_factors_final %*%as.matrix(sphere_axis)) %*% as.matrix(sphere_axis))
 imu.data.mag.sphere.final <- imu.data.body  %>% mutate(multiplication= as.matrix(imu.data.body [,]) %*% scale_factors_final) %>% select(multiplication) %>% mutate(MX=multiplication[,1], MY=multiplication[,2], MZ=multiplication[,3]) %>% select(MX,MY,MZ)
 open3d()
 plot3d(imu.data.mag.sphere.final, col = "blue")
@@ -233,3 +234,12 @@ diag(scale_factors_3) <- diag(ellipsoid_axis)/as.double(sphere_radius)
 scale_factors_3
 #sphere_radius
 mean(radius_data)
+for(i in 1:dim(mag_model_data)[1]) {
+  mag_model_data_transformed[i,] = scale_factors_3 %*% (mag_model_inv_A %*% t(mag_model_data[i,] - t(mag_model_b)))
+}
+open3d()
+plot3d(mag_model_data_transformed, col = "blue")
+spheres3d(c(0,0,0), radius = 1, col = "red", alpha = 0.4)
+mean(mag_model_data_transformed$MX)
+mean(mag_model_data_transformed$MY)
+mean(mag_model_data_transformed$MZ)

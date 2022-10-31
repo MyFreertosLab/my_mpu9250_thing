@@ -131,7 +131,7 @@ mag_plot_data(mag_model$data_source)
 
 open3d()
 plot3d(mag_model$data_source, col = "blue")
-spheres3d(c(0,0,0), radius = 227.9377, col = "red", alpha = 0.4)
+spheres3d(t(as.matrix(mag_model$b)), radius = 227.9377, col = "red", alpha = 0.4)
 
 mag_plot_data(mag_data_target, sphere_radius=1)
 

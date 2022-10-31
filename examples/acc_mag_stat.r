@@ -12,12 +12,7 @@ options(rgl.printRglwidget = TRUE)
 library(mvmeta)
 
 imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
-
-#centerY = mean(imu.data.body$MX)
-#centerX = mean(imu.data.body$MY)
-#centerZ = -mean(imu.data.body$MZ)
-
-imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ) %>% mutate(MX = (MX -centerX), MY = (MY - centerY), MZ = (MZ - centerZ))
+imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
 #imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
 
 #acc_mag_cos <-(imu.data.body$AX*imu.data.body$MX + imu.data.body$AY*imu.data.body$MY + imu.data.body$AZ*imu.data.body$MZ)/(sqrt(imu.data.body$AX**2 + imu.data.body$AY**2 + imu.data.body$AZ**2)*sqrt(imu.data.body$MX**2 + imu.data.body$MY**2 + imu.data.body$MZ**2))
@@ -33,26 +28,27 @@ scatter3D(imu.data.body$MX, imu.data.body$MY, imu.data.body$MZ, colvar = imu.dat
 plotrgl()
 rglwidget()
 
-imu.data.mag.poly <- imu.data.body %>% select(MX, MY, MZ) %>% mutate(One = 1, MX2 = MX**2, MY2 = MY**2, MZ2=MZ**2, MXY=MX*MY, MXZ=MX*MZ, MYZ=MY*MZ)
+imu.data.mag.poly <- imu.data.body %>% select(MX, MY, MZ) %>% mutate(One = -1, MX2 = MX**2, MY2 = MY**2, MZ2=MZ**2, MXY=MX*MY, MXZ=MX*MZ, MYZ=MY*MZ)
 fit <- lm(One ~ . - 1, imu.data.mag.poly)
 coeff.hat <- coef(fit)
 P <- as.matrix(imu.data.mag.poly %>% select(-One))
 
-open3d()
-plot3d(ellipse3d(fit, level = 0.90), col = "blue", alpha = 0.5, aspect = TRUE)
+#open3d()
+#plot3d(ellipse3d(fit, level = 0.98), col = "blue", alpha = 0.5, aspect = TRUE)
 
 a=coeff.hat["MX2"]
 b=coeff.hat["MXY"]/2
 c=coeff.hat["MXZ"]/2
-f=coeff.hat["MYZ"]/2
 d=coeff.hat["MY2"]
-e=coeff.hat["MZ2"]
-A = matrix(c(a,b,c,b,d,f,c,f,e), nrow = 3, ncol=3)
+e=coeff.hat["MYZ"]/2
+f=coeff.hat["MZ2"]
+
+A = xpndMat(c(a,b,c,d,e,f))
 B = matrix(c(coeff.hat["MX"],coeff.hat["MY"],coeff.hat["MZ"]))
 X=as.matrix(imu.data.mag.poly %>% select(MX, MY, MZ))
 
 # Calcola espressione algebrica
-matrix(colSums(coeff.hat * t(imu.data.mag.poly %>% select(MX, MY, MZ, MX2, MY2, MZ2, MXY, MXZ, MYZ))))[1]
+coeff.hat %*% t(as.matrix((imu.data.mag.poly %>% select(MX, MY, MZ, MX2, MY2, MZ2, MXY, MXZ, MYZ))[1,]))
 # Stesso calcolo in algebra lineare
 t(matrix(X[1,1:3])) %*% A %*% matrix(X[1,1:3]) + t(B) %*% matrix(X[1,1:3])
 
@@ -195,7 +191,8 @@ make_psi_als <- function(X,variance,M) {
   }
   psi_als
 }
-psi_als = make_psi_als(X, 315.70,make_index_matrix(3))
+#psi_als = make_psi_als(X, 315.70,make_index_matrix(3))
+psi_als = make_psi_als(X, (summary(fit)$sigma)^2,make_index_matrix(3))
 
 ################################################
 ## Step 7)8): Find eigenvector of min eigenvalue
@@ -293,21 +290,22 @@ for(i in 1:(dim(X)[1])) {
 for(i in 1:(dim(X)[1])) {
   x=matrix(X[i,1:3])-matrix(als$c)
   val=as.double(t(x)%*%als$Ae%*%x)
-  if(val < 0) {
+  if(val > 0) {
     print(val)
   }
 }
-Ae_eigen_values=matrix(eigen(als$Ae)$values)
-a=sqrt(as.double(abs(1/Ae_eigen_values[1,1])))
-b=sqrt(as.double(abs(1/Ae_eigen_values[2,1])))
-c=sqrt(as.double(abs(1/Ae_eigen_values[3,1])))
+
+#Ae_eigen_values=matrix(eigen(als$Ae)$values)
+#a=sqrt(as.double(abs(1/Ae_eigen_values[1,1])))
+#b=sqrt(as.double(abs(1/Ae_eigen_values[2,1])))
+#c=sqrt(as.double(abs(1/Ae_eigen_values[3,1])))
 
 
 # T.B.D
-Q=AE
-k=t(C) %*% Q %*% C -1
-u=-2*t(AE) %*% C
-h=matrix(X[1,1:3])
-t(h) %*% Q %*% (h) + t(u) %*% h + k
+#Q=AE
+#k=t(C) %*% Q %*% C -1
+#u=-2*t(AE) %*% C
+#h=matrix(X[1,1:3])
+#t(h) %*% Q %*% (h) + t(u) %*% h + k
 
 

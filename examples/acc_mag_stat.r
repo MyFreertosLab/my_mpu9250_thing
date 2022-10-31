@@ -61,26 +61,22 @@ AE=1/(t(C)%*%A%*%C+1)[1,1]*A
 #   0 0 0 0 1 0 0 0 0 
 #   0 0 0 0 0 1/sqrt(2) 0 1/sqrt(2) 0
 #   0 0 0 0 0 0 0 0 1
-# Non sembra fornire il risultato corretto.
-U=matrix(c(1, 0, 0, 0, 0, 0, 0, 0, 0,
-           0, 1/sqrt(2), 0, 1/sqrt(2), 0, 0, 0, 0, 0,
-           0, 0, 1/sqrt(2), 0, 0, 0, 1/sqrt(2), 0, 0,
-           0, 0, 0, 0, 1, 0, 0, 0, 0,
-           0, 0, 0, 0, 0, 1/sqrt(2), 0, 1/sqrt(2), 0,
-           0, 0, 0, 0, 0, 0, 0, 0, 1), nrow=6, ncol=9)
-
-# Implementazione di Symmetric Kronecker Product per n=3
 U=matrix(c(1, 0, 0, 0, 0, 0, 0, 0, 0,
            0, 1, 0, 1, 0, 0, 0, 0, 0,
            0, 0, 1, 0, 0, 0, 1, 0, 0,
            0, 0, 0, 0, 1, 0, 0, 0, 0,
            0, 0, 0, 0, 0, 1, 0, 1, 0,
            0, 0, 0, 0, 0, 0, 0, 0, 1), nrow=6, ncol=9, byrow = TRUE)
-symm_kronecker <- function(A,B,U) {
-  U %*% kronecker(A,B)
+
+symm_kronecker_x <- function(x,U) {
+  n = sqrt(dim(U)[2])
+  K <- matrix(0,n,n)
+  diag(K) <- x
+  as.matrix(diag((U %*% kronecker(K,K)%*%t(U))))
 }
+
 x=matrix(X[1,1:3])
-xk=symm_kronecker(x,x, U)
+xk=symm_kronecker_x(x, U)
 xtAx=t(xk) %*% matrix(vechMat(A))
 t(x)%*%A%*%x
 xtAx
@@ -109,7 +105,7 @@ t3 <- function(x, variance) {
   x^3 - 3*x*variance
 }
 t4 <- function(x, variance) {
-  x^4 - 3*x^2*variance + 3*variance^2
+  x^4 - 6*x^2*variance + 3*variance^2
 }
 T <- function(k, i, l, X, variance) {
     stopifnot(k >= 0 && k <= 4)
@@ -123,6 +119,19 @@ make_index_matrix <- function(n) {
   Uno <- matrix(rep(1,n+1))
   Indx <- matrix(c(c(1:n),0))
   matrix(c(vechMat(Indx %*% t(Uno)), vechMat(Uno %*% t(Indx))), ncol = 2, byrow = FALSE)
+  M <- matrix(c(
+    1, 1,
+    1, 2,
+    1, 3,
+    2, 2,
+    2, 3,
+    3, 3,
+    1, 0,
+    2, 0,
+    3, 0,
+    0,0), nrow=10, ncol=2, byrow = TRUE
+  )
+  return(M)
 }
 #####################################
 ## Step 3): Form Tensor R 
@@ -154,9 +163,8 @@ ni_als <- function(p,q,X,variance,M) {
 ## Step 5): Define index off-diagonal
 #####################################
 index_off_diagonal <- function(n) {
-  D1 <- seq(1,(n+1)*n/2)
-  D2 <- seq(1,n)*(seq(1,n)+1)/2
-  setdiff(D1, D2)
+  # only for n=3
+  return(c(2,3,5))
 }
 
 #####################################
@@ -191,9 +199,10 @@ calc_eigenvector_psi_als <- function(psi_als) {
   eigen_als = eigen(psi_als)
   eigen_values = eigen_als$values
   eigen_vectors = eigen_als$vectors 
-  idx = which.min(eigen_values)
+  idx = which.min(abs(eigen_values))
   beta = matrix(eigen_vectors[, idx])
-  beta/norm(beta)
+  result = beta/norm(beta, "2")
+  return(result)
 }
 ################################################
 ## Step 9): Estimate A, b, d
@@ -208,7 +217,7 @@ estimate_d <- function(beta, n) {
   beta[dim(beta)[1]]
 }
 estimate_c <- function(A,b,n) {
-  c=-0.5*solve(estimate_A(psi_als,n))%*%estimate_b(psi_als,n)
+  c=-0.5*solve(A)%*%b
 }
 estimate_Ae <- function(A,c,d) {
    as.double((1/(t(c) %*% A %*% c - d)))*A
@@ -227,43 +236,6 @@ estimate_all <- function(psi_als, n) {
   als$d=d
   als$c=c
   als$Ae=Ae
-  
-  v1=matrix(eigen(Ae)$vectors[,1])
-  v2=matrix(eigen(Ae)$vectors[,2])
-  v3=matrix(eigen(Ae)$vectors[,3])
-  
-  l1=as.double(eigen(Ae)$values[1])
-  l2=as.double(eigen(Ae)$values[2])
-  l3=as.double(eigen(Ae)$values[3])
-
-  print("autovalori pre")
-  print(l1)
-  print(l2)
-  print(l3)
-  if(l1 < 0 || l2 < 0 || l3 < 0) {
-    Ae2 = matrix(rep(0,n*n), nrow = n, ncol=n)
-    if(l1>0) {
-      Ae2 = Ae2 + l1*(v1%*%t(v1))
-      print("l1")
-    }
-     if(l2>0) {
-      Ae2 = Ae2 + l2*(v2%*%t(v2))
-      print("l2")
-    }
-    if(l3>0) {
-      Ae2 = Ae2 + l3*(v3%*%t(v3))
-      print("l3")
-    }
-    als$Ae = Ae2
-  }  
-  l1=as.double(eigen(als$Ae)$values[1])
-  l2=as.double(eigen(als$Ae)$values[2])
-  l3=as.double(eigen(als$Ae)$values[3])
-  
-  print("autovalori post")
-  print(l1)
-  print(l2)
-  print(l3)
   als
 }
 
@@ -323,11 +295,15 @@ mag_estimate <- function(als, mag_data) {
   mag_model_B = mag_model_V %*% sqrt(mag_model_alpha*mag_model_D) %*% t(mag_model_V) # the same of sqrtm(mag_model_Q)
   mag_model_inv_A = mag_model_B 
   mag_model_A = solve(mag_model_inv_A)
+  f <- 1/sqrt(mag_model$Hm2)
+  mag_model_scale_factors <- matrix(0,3,3)
+  diag(mag_model_scale_factors) <- c(f,f,f)
   
   result <- {}
   result$Q <- mag_model_Q
   result$b <- mag_model_b
   result$k <- mag_model_k
+  result$offset <- mag_model_b
   result$V <- mag_model_V
   result$D <- mag_model_D
   result$B <- mag_model_B
@@ -336,7 +312,8 @@ mag_estimate <- function(als, mag_data) {
   result$invA <- mag_model_inv_A
   result$model <- mag_model
   result$data_source <- mag_data
-  result$last_coeff <- coeff_spheric2.hat
+  result$scale_factors <- mag_model_scale_factors
+  result$als <- als
   return(result)
 }
 
@@ -348,12 +325,30 @@ mag_apply_estimator <- function(mag_model) {
   # apply model to data
   for(i in 1:dim(mag_data)[1]) {
     x <- t(mag_data[i,] - t(mag_model_b))
-    mag_data_target[i,] = (mag_model_inv_A %*% x)
+    mag_data_target[i,] = mag_model$scale_factors %*% (mag_model_inv_A %*% x)
   }
   return(as.data.frame(mag_data_target))
 }
 
-
+# estimation
 prova <- mag_estimate(als, imu.data.body)
 prova_data <- mag_apply_estimator(prova)
+
+# calcola rotazione yaw, pitch, roll
+V <- eigen(prova$invA)$vectors
+v1 <- V[,1]
+v2 <- V[,2]
+v3 <- V[,3]
+pitch <- -asin(v1[3])
+yaw <- acos(v1[1]/cos(pitch))
+roll <- asin(v2[3]/cos(pitch))
+
+# Plotting
+mag_plot_data(prova$data_source)
 mag_plot_data(prova_data)
+sphere_radius = sqrt(mean(prova_data$MX^2+prova_data$MY^2+prova_data$MZ^2))
+
+open3d()
+plot3d(prova_data, col = "blue")
+spheres3d(c(0,0,0), radius = sphere_radius, col = "red", alpha = 0.4)
+

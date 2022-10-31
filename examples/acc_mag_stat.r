@@ -13,16 +13,6 @@ library(mvmeta)
 
 imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
 imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
-#imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
-
-#acc_mag_cos <-(imu.data.body$AX*imu.data.body$MX + imu.data.body$AY*imu.data.body$MY + imu.data.body$AZ*imu.data.body$MZ)/(sqrt(imu.data.body$AX**2 + imu.data.body$AY**2 + imu.data.body$AZ**2)*sqrt(imu.data.body$MX**2 + imu.data.body$MY**2 + imu.data.body$MZ**2))
-#T = c(1:1:length(acc_mag_cos))
-#acc_mag_angle <- 90 - acos(acc_mag_cos)/(2*pi)*360
-#plot(T,acc_mag_angle)
-#mean(acc_mag_angle)
-#var(acc_mag_angle)
-#sd(acc_mag_angle)
-
 
 scatter3D(imu.data.body$MX, imu.data.body$MY, imu.data.body$MZ, colvar = imu.data.body$MZ, col = NULL, add = FALSE)
 plotrgl()
@@ -33,8 +23,8 @@ fit <- lm(One ~ . - 1, imu.data.mag.poly)
 coeff.hat <- coef(fit)
 P <- as.matrix(imu.data.mag.poly %>% select(-One))
 
-#open3d()
-#plot3d(ellipse3d(fit, level = 0.98), col = "blue", alpha = 0.5, aspect = TRUE)
+open3d()
+plot3d(ellipse3d(fit, level = 0.98), col = "blue", alpha = 0.5, aspect = TRUE)
 
 a=coeff.hat["MX2"]
 b=coeff.hat["MXY"]/2
@@ -279,21 +269,21 @@ estimate_all <- function(psi_als, n) {
 
 als=estimate_all(psi_als, 3)
 
-for(i in 1:(dim(X)[1])) {
-  x=matrix(X[i,1:3])
-  val=as.double(t(x)%*%als$A%*%x+t(als$b)%*%x+als$d)
-  if(val > 0) {
-    print(val)
-  }
-}
+#for(i in 1:(dim(X)[1])) {
+#  x=matrix(X[i,1:3])
+#  val=as.double(t(x)%*%als$A%*%x+t(als$b)%*%x+als$d)
+#  if(val > 0) {
+#    print(val)
+#  }
+#}
 
-for(i in 1:(dim(X)[1])) {
-  x=matrix(X[i,1:3])-matrix(als$c)
-  val=as.double(t(x)%*%als$Ae%*%x)
-  if(val > 0) {
-    print(val)
-  }
-}
+#for(i in 1:(dim(X)[1])) {
+#  x=matrix(X[i,1:3])-matrix(als$c)
+#  val=as.double(t(x)%*%als$Ae%*%x)
+#  if(val > 0) {
+#    print(val)
+#  }
+#}
 
 #Ae_eigen_values=matrix(eigen(als$Ae)$values)
 #a=sqrt(as.double(abs(1/Ae_eigen_values[1,1])))
@@ -308,4 +298,62 @@ for(i in 1:(dim(X)[1])) {
 #h=matrix(X[1,1:3])
 #t(h) %*% Q %*% (h) + t(u) %*% h + k
 
+mag_estimate <- function(als, mag_data) {
+  mag_model_Q = als$A
+  mag_model_u = als$b
+  mag_model_k = als$d
+  mag_model_b = -1/2*solve(mag_model_Q)%*%mag_model_u
+  
+  # Check result
+  eigen(mag_model_Q)
+  D=diag(eigen(mag_model_Q)$values)
+  V=eigen(mag_model_Q)$vectors
+  TA=V%*%D%*%t(V)
+  stopifnot(abs(mag_model_Q - TA) < 1e-15)
+  TD=t(V)%*%mag_model_Q%*%V
+  stopifnot(abs(D - TD) < 1e-15)
+  
+  #matrix square root of Q
+  appo = mag_model_Q %*% t(mag_model_Q)
+  appo_eigen = eigen(appo)
+  mag_model_V = appo_eigen$vectors
+  mag_model_D = diag(eigen(mag_model_Q)$values)
+  mag_model_magnetic_norm = t(mag_model_b)%*%mag_model_Q%*%mag_model_b - mag_model_k 
+  mag_model_alpha = -as.double(4*mag_model_magnetic_norm/(4*mag_model_k - t((t(mag_model_V)%*%mag_model_u))%*%solve(mag_model_D)%*%(t(mag_model_V)%*%mag_model_u)))
+  mag_model_B = mag_model_V %*% sqrt(mag_model_alpha*mag_model_D) %*% t(mag_model_V) # the same of sqrtm(mag_model_Q)
+  mag_model_inv_A = mag_model_B 
+  mag_model_A = solve(mag_model_inv_A)
+  
+  result <- {}
+  result$Q <- mag_model_Q
+  result$b <- mag_model_b
+  result$k <- mag_model_k
+  result$V <- mag_model_V
+  result$D <- mag_model_D
+  result$B <- mag_model_B
+  result$Hm2 <- mag_model_magnetic_norm
+  result$alpha <- mag_model_alpha
+  result$invA <- mag_model_inv_A
+  result$model <- mag_model
+  result$data_source <- mag_data
+  result$last_coeff <- coeff_spheric2.hat
+  return(result)
+}
 
+mag_apply_estimator <- function(mag_model) {
+  mag_data <- mag_model$data_source
+  mag_model_inv_A <- mag_model$invA
+  mag_model_b <- mag_model$b
+  mag_data_target <- mag_data
+  # apply model to data
+  for(i in 1:dim(mag_data)[1]) {
+    x <- t(mag_data[i,] - t(mag_model_b))
+    mag_data_target[i,] = (mag_model_inv_A %*% x)
+  }
+  return(as.data.frame(mag_data_target))
+}
+
+
+prova <- mag_estimate(als, imu.data.body)
+prova_data <- mag_apply_estimator(prova)
+mag_plot_data(prova_data)

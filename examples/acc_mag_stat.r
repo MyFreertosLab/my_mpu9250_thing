@@ -287,7 +287,7 @@ V <- eigen(prova$invA)$vectors
 v1 <- V[,1]
 v2 <- V[,2]
 v3 <- V[,3]
-pitch <- -asin(v1[3])
+pitch <- asin(-v1[3])
 yaw <- acos(v1[1]/cos(pitch))
 roll <- asin(v2[3]/cos(pitch))
-
+print(c("yaw, pitch roll: ", yaw/pi*180, pitch/pi*180, roll/pi*180), quote = FALSE)

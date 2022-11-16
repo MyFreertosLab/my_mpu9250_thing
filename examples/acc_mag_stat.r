@@ -182,11 +182,26 @@ estimate_c <- function(A,b,n) {
 estimate_Ae <- function(A,c,d) {
    as.double((1/(t(c) %*% A %*% c - d)))*A
 }
+to_definite_positive_factor <- function(A) {
+  val <- eigen(A)$values
+  result = 0
+  if(prod(val >= 0) == 1) {
+    result = 1
+  } else if(prod(val < 0) == 1) {
+    result = -1
+  }
+  return (result)
+}
 estimate_all <- function(psi_als, n) {
   beta = calc_eigenvector_psi_als(psi_als)
   A=estimate_A(beta, n)
-  b=estimate_b(beta, n)
-  d=estimate_d(beta, n)
+  # force matrix to definite positive if it's negative
+  factor <- to_definite_positive_factor(A)
+  stopifnot(factor != 0)
+  A = factor*A
+  
+  b=factor*estimate_b(beta, n)
+  d=factor*estimate_d(beta, n)
   c=estimate_c(A, b, n)
   Ae=estimate_Ae(A,c,d)
 
@@ -259,28 +274,31 @@ mag_apply_estimator <- function(mag_model) {
 }
 
 mag_plot_data <- function(mag_data, sphere_radius = -1) {
-  scatter3D(mag_data$MX, mag_data$MY, mag_data$MZ, colvar = mag_data$MZ, col = NULL, add = FALSE)
+  scatter3D(mag_data[,1], mag_data[,2], mag_data[,3], colvar = mag_data[,3], col = NULL, add = FALSE, scale = FALSE, ticktype = "detailed")
   plotrgl()
   rglwidget()
 }
 
-# estimation
-psi_als = make_psi_als(as.matrix(imu.data.body), 0.1720985^2,make_index_matrix(3))
-als=estimate_all(psi_als, 3)
-prova <- mag_estimate(als, imu.data.body)
+# estimation Magnetometer
+#psi_als_mag = make_psi_als(as.matrix(imu.data.body), 0.1720985^2,make_index_matrix(3))
+psi_als_mag = make_psi_als(as.matrix(imu.data.body), 4.213842^2,make_index_matrix(3))
+als_mag=estimate_all(psi_als_mag, 3)
+prova <- mag_estimate(als_mag, imu.data.body)
 prova_data <- mag_apply_estimator(prova)
+# remove outlier
+prova_data <- prova_data %>% mutate(RAD = sqrt(MX**2+MY**2+MZ**2)) %>% filter(RAD < (mean(RAD) + 0.2)) %>% filter(RAD > (mean(RAD) - 0.2))
 
-# Plotting
+# Plotting Magnetometer
 mag_plot_data(prova$data_source)
 mag_plot_data(prova_data)
-sphere_radius = sqrt(mean(prova_data$MX^2+prova_data$MY^2+prova_data$MZ^2))
+sphere_radius_mag = mean(prova_data$RAD)
 
-scatter3D(imu.data.body$MX-als$c[1], imu.data.body$MY-als$c[2], imu.data.body$MZ-als$c[3], col = "green", add = FALSE)
-scatter3D(prova_data$MX*250, prova_data$MY*250, prova_data$MZ*250, col = "red", add = TRUE)
+scatter3D(imu.data.body$MX-als_mag$c[1], imu.data.body$MY-als_mag$c[2], imu.data.body$MZ-als_mag$c[3], col = "green", add = FALSE, scale=FALSE)
+scatter3D(prova_data$MX*250, prova_data$MY*250, prova_data$MZ*250, col = "red", add = TRUE, scale=FALSE)
 plotrgl()
 rglwidget()
 
-print(c("sphere radius: ", sphere_radius), quote = FALSE)
+print(c("sphere radius: ", sphere_radius_mag), quote = FALSE)
 
 # calcola rotazione yaw, pitch, roll
 V <- eigen(prova$invA)$vectors
@@ -291,3 +309,42 @@ pitch <- asin(-v1[3])
 yaw <- acos(v1[1]/cos(pitch))
 roll <- asin(v2[3]/cos(pitch))
 print(c("yaw, pitch roll: ", yaw/pi*180, pitch/pi*180, roll/pi*180), quote = FALSE)
+
+#imu.data.acc <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-acc.csv')
+#imu.data.acc <- imu.data.acc %>% select(AX, AY, AZ) 
+imu.data.acc <- imu.data.mag %>% filter(MV == 1) %>% select(AX, AY, AZ)
+
+# estimation Accelerometer
+##psi_als_acc = make_psi_als(as.matrix(imu.data.acc), 0.07497^2,make_index_matrix(3))
+psi_als_acc = make_psi_als(as.matrix(imu.data.acc), 86.48833^2,make_index_matrix(3))
+als_acc=estimate_all(psi_als_acc, 3)
+prova_acc <- mag_estimate(als_acc, imu.data.acc)
+prova_data_acc <- mag_apply_estimator(prova_acc)
+
+# Plotting Accelerometer
+mag_plot_data(prova_acc$data_source)
+mag_plot_data(prova_data_acc)
+sphere_radius_acc = sqrt(mean(prova_data_acc$AX^2+prova_data_acc$AY^2+prova_data_acc$AZ^2))
+
+scatter3D(imu.data.acc$AX, imu.data.acc$AY, imu.data.acc$AZ, col = "blue", add = FALSE, ticktype = "detailed", scale=FALSE)
+scatter3D(imu.data.acc$AX-als_acc$c[1], imu.data.acc$AY-als_acc$c[2], imu.data.acc$AZ-als_acc$c[3], col = "green", add = TRUE, scale=FALSE)
+scatter3D(prova_data_acc$AX*4143, prova_data_acc$AY*4143, prova_data_acc$AZ*4143, col = "red", add = TRUE, scale=FALSE)
+
+plotrgl()
+rglwidget()
+
+# Check that it's a sphere
+imu.data.acc.poly <- prova_data_acc %>% select(AX, AY, AZ) %>% mutate(One = 1, AX2 = AX**2, AY2 = AY**2, AZ2=AZ**2) %>% select(One, AX2, AY2, AZ2)
+fit_spheric_acc <- lm(One ~ . - 1, imu.data.acc.poly)
+coeff_spheric_acc.hat <- coef(fit_spheric_acc)
+sphere_axis=sqrt(1/coeff_spheric_acc.hat )
+
+scale_factors_3 = matrix(0,3,3)
+diag(scale_factors_3) <- 1/sphere_axis
+
+xr <- matrix(0, dim(prova_data)[1], 1)
+for(i in 1:dim(prova_data)[1]) {
+  xm <- as.matrix(prova_data[i,1:3])
+  xa <- as.matrix(prova_data_acc[i,1:3])
+  xr[i] <- acos((xm %*% t(xa))/(norm(xm, "2")*norm(xa, "2")))/pi*180
+}

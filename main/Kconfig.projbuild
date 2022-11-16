@@ -37,5 +37,16 @@ menu "Sdrone Configuration"
         bool "PPM"
     endchoice
   endmenu
+  
+  menu "Data Configuration"
+    choice ESP_DATA_TYPE
+      prompt "Data Type"
+      default ESP_DATA_RAW
+      config ESP_DATA_RAW
+        bool "RAW"
+      config ESP_DATA_CAL
+        bool "CALIBRATED"
+    endchoice
+  endmenu
 endmenu
 

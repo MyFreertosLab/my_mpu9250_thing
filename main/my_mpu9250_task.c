@@ -43,6 +43,11 @@ typedef struct my_raw_data_s {
 	uint8_t mag_data_drdy;
 } mpu9250_raw_message_t;
 
+typedef struct my_cal_data_s {
+	mpu9250_calibrated_data_t data;
+	uint8_t mag_data_drdy;
+} mpu9250_cal_message_t;
+
 typedef struct {
 	uint8_t accel_fsr;
 	uint8_t gyro_fsr;
@@ -170,27 +175,43 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 
     	    // read/send cycle
     		uint32_t counter = 0;
-    		mpu9250_raw_message_t raw_message;
+#ifdef CONFIG_ESP_DATA_CAL
+    		mpu9250_cal_message_t data_message;
+    		uint16_t data_size = sizeof(mpu9250_cal_message_t);
+    		char* data_pointer = (char*)&mpu9250_handle->data.cal_data.data_s_xyz;
+#else
+    		mpu9250_raw_message_t data_message;
+    		uint16_t data_size = sizeof(mpu9250_raw_message_t);
+    		char* data_pointer = (char*)&mpu9250_handle->data.raw_data.data_s_xyz;
+#endif
+			printf("sizeof data: %d\n", data_size);
+			printf("sizeof float: %d\n", sizeof(float));
     		while (true) {
-        		memset(&raw_message, 0, sizeof(mpu9250_raw_message_t));
+        		memset(&data_message, 0, data_size);
     			counter++;
     			if( ulTaskNotifyTake( pdTRUE,xMaxBlockTime ) == 1) {
     				counter %= 100;
     				ESP_ERROR_CHECK(mpu9250_load_data(mpu9250_handle));
     				if(counter == 0) {
+#ifdef CONFIG_ESP_DATA_CAL
+    					printf("Gyro .: [%d][%d][%d]\n", mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_z);
+    					printf("Accel : [%5.3f][%5.3f][%5.3f]\n", mpu9250_handle->data.cal_data.data_s_xyz.accel_data_x, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_y, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_z);
+    					printf("Mag ..: [%d][%d][%d][%5.3f][%5.3f][%5.3f][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.mag_data_x, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_y, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_z, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_x, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_y, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_z, mpu9250_handle->data.mag.drdy);
+#else
     					printf("Gyro .: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_z);
     					printf("Accel : [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.accel_data_x, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_y, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_z);
     					printf("Mag ..: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.mag_data_x, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_y, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_z);
+#endif
         				esp_err_t res = mpu9250_send_message(sock, (char*)&config_data, buff, sizeof(mpu9250_config_data_t), MY_MPU9250_SENSORS_MSG_CONFIG_START, MY_MPU9250_SENSORS_MSG_CONFIG_END);
         				if(res != ESP_OK) {
         					break;
         				}
     				}
     				// copy data to send
-    				memcpy((char*)&raw_message.data, (char*)&mpu9250_handle->data.raw_data.data_s_xyz, sizeof(mpu9250_raw_data_t));
-    				raw_message.mag_data_drdy = mpu9250_handle->data.mag.drdy;
+    				memcpy((char*)&data_message.data, data_pointer, data_size);
+    				data_message.mag_data_drdy = mpu9250_handle->data.mag.drdy;
 
-    				esp_err_t res = mpu9250_send_message(sock, (char*)&raw_message, buff, sizeof(mpu9250_raw_message_t), MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
+    				esp_err_t res = mpu9250_send_message(sock, (char*)&data_message, buff, data_size, MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
     				if(res != ESP_OK) {
     					break;
     				}
@@ -201,7 +222,6 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     				}
     		    }
     		}
-
     		break;
     	}
 

@@ -11,55 +11,48 @@ from numpy import dtype
 
 HOST = "192.168.1.64"  
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
-raw_data_queue = Queue(maxsize = 1000)
+cal_data_queue = Queue(maxsize = 1000)
 
-class RawDataFields(ctypes.Structure):
+class CalDataFields(ctypes.Structure):
     _fields_ = [
-        ("ax",   ctypes.c_short),
-        ("ay",   ctypes.c_short),
-        ("az",   ctypes.c_short),
+        ("ax",   ctypes.c_float),
+        ("ay",   ctypes.c_float),
+        ("az",   ctypes.c_float),
         ("temp_data",   ctypes.c_short),
         ("gx",   ctypes.c_short),
         ("gy",   ctypes.c_short),
         ("gz",   ctypes.c_short),
-        ("mx",   ctypes.c_short),
-        ("my",   ctypes.c_short),
-        ("mz",   ctypes.c_short),
-        ("ext_1",   ctypes.c_short),
-        ("ext_2",   ctypes.c_short),
-        ("ext_3",   ctypes.c_short),
-        ("ext_4",   ctypes.c_short),
-        ("ext_5",   ctypes.c_short),
-        ("ext_6",   ctypes.c_short),
-        ("ext_7",   ctypes.c_short),
-        ("ext_8",   ctypes.c_short),
-        ("ext_9",   ctypes.c_short),
+        ("mx",   ctypes.c_float),
+        ("my",   ctypes.c_float),
+        ("mz",   ctypes.c_float),
         ("mag_drdy",   ctypes.c_uint8),
         ("dummy",   ctypes.c_uint8),
     ]
 
 
-def parse_raw_data_payload(raw_data):
-  fmt = "<hhhhhhhhhhhhhhhhhhhBB"
+def parse_cal_data_payload(cal_data):
+  fmt = "<fffhhhhfffBB"
   fmt_size = struct.calcsize(fmt)
-  k = RawDataFields();
-  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9, k.mag_drdy, k.dummy = struct.unpack(fmt, raw_data[:fmt_size])
+  k = CalDataFields();
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.dummy = struct.unpack(fmt, cal_data[:fmt_size])
   return k
   
-def raw_data_renderer_function(name, in_queue):
+def cal_data_renderer_function(name, in_queue):
     max_qsize = 0
-    data = np.zeros((1000,10), dtype=np.int16)
+    data = np.zeros((1000,10), dtype=np.double)
     
-    with open("imu-data.csv", "w") as file:
+    with open("imu-cal-data.csv", "w") as file:
       writer = csv.writer(file, delimiter = ',')
       record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV']
       writer.writerow(record)
       while True:
         payload = in_queue.get()
-        if len(payload) != 40:
+        len_payload = len(payload)
+        if len_payload != 36:
+          print(f"len(payoad) by {len_payload}")
           continue
-        k = parse_raw_data_payload(payload)
-        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.mz, k.mx, k.my, k.mz, k.mag_drdy], dtype=np.int16)
+        k = parse_cal_data_payload(payload)
+        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy], dtype=np.double)
         writer.writerow(record)
 
 def socket_receiver_function(name, out_queue):
@@ -109,9 +102,9 @@ def socket_receiver_function(name, out_queue):
 
 
 if __name__ == "__main__":
-    rd = threading.Thread(target=raw_data_renderer_function, args=("raw_data_renderer",raw_data_queue, ))
+    rd = threading.Thread(target=cal_data_renderer_function, args=("cal_data_renderer",cal_data_queue, ))
     rd.start()
-    sr = threading.Thread(target=socket_receiver_function, args=("receiver",raw_data_queue, ))
+    sr = threading.Thread(target=socket_receiver_function, args=("receiver",cal_data_queue, ))
     sr.start()
     sr.join()
     

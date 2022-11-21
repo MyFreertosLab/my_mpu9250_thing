@@ -17,7 +17,7 @@ imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>%
 imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
 
 # plot original data
-scatter3D(imu.data.body$MX, imu.data.body$MY, imu.data.body$MZ, colvar = imu.data.body$MZ, col = NULL, add = FALSE)
+scatter3D(imu.data.body$MX, imu.data.body$MY, imu.data.body$MZ, colvar = imu.data.body$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
 plotrgl()
 rglwidget()
 
@@ -281,12 +281,14 @@ mag_plot_data <- function(mag_data, sphere_radius = -1) {
 
 # estimation Magnetometer
 #psi_als_mag = make_psi_als(as.matrix(imu.data.body), 0.1720985^2,make_index_matrix(3))
-psi_als_mag = make_psi_als(as.matrix(imu.data.body), 4.213842^2,make_index_matrix(3))
+#psi_als_mag = make_psi_als(as.matrix(imu.data.body), 4.213842^2,make_index_matrix(3))
+psi_als_mag = make_psi_als(as.matrix(imu.data.body), 5.618457^2,make_index_matrix(3))
 als_mag=estimate_all(psi_als_mag, 3)
 prova <- mag_estimate(als_mag, imu.data.body)
 prova_data <- mag_apply_estimator(prova)
 # remove outlier
-prova_data <- prova_data %>% mutate(RAD = sqrt(MX**2+MY**2+MZ**2)) %>% filter(RAD < (mean(RAD) + 0.2)) %>% filter(RAD > (mean(RAD) - 0.2))
+#prova_data <- prova_data %>% mutate(RAD = sqrt(MX**2+MY**2+MZ**2)) %>% filter(RAD < (mean(RAD) + 0.2)) %>% filter(RAD > (mean(RAD) - 0.2))
+prova_data <- prova_data %>% mutate(RAD = sqrt(MX**2+MY**2+MZ**2)) 
 
 # Plotting Magnetometer
 mag_plot_data(prova$data_source)
@@ -348,3 +350,35 @@ for(i in 1:dim(prova_data)[1]) {
   xa <- as.matrix(prova_data_acc[i,1:3])
   xr[i] <- acos((xm %*% t(xa))/(norm(xm, "2")*norm(xa, "2")))/pi*180
 }
+
+#Normalization
+cal_data_m <- prova_data %>% mutate(NRM = sqrt(MX^2+MY^2+MZ^2)) %>% mutate(MX = MX/NRM, MY=MY/NRM, MZ= MZ/NRM) %>% select(MX, MY, MZ)
+cal_data_a <- prova_data_acc %>% mutate(NRM = sqrt(AX^2+AY^2+AZ^2)) %>% mutate(AX = AX/NRM, AY=AY/NRM, AZ= AZ/NRM) %>% select(AX, AY, AZ)
+
+cal_data <- cbind(cal_data_m, cal_data_a)
+#g = (0,0,-1)
+#ax = sin(pitch)
+#ay = -cos(pitch)*sin(roll)
+#az = -cos(pitch)*cos(roll)
+#roll = atan(ay/az)
+#pitch = atan(ax/ay*sin(roll))
+cal_data_rpy <- cal_data %>% mutate(RA = atan(-AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
+  mutate(IMX = MX * cos(PA/180*pi) + MY*sin(PA/180*pi)*sin(RA/180*pi) + MZ*sin(PA/180*pi)*cos(RA/180*pi),
+         IMY = MY*cos(RA/180*pi) - MZ*sin(RA/180*pi),
+         IMZ = -MX * sin(PA/180*pi) + MY*cos(PA/180*pi)*sin(RA/180*pi) + MZ*cos(PA/180*pi)*cos(RA/180*pi), 
+         YM = 180 * atan2(-IMY,IMX)/pi
+         ) %>% 
+  mutate(IIMX = IMX * cos(YM/180*pi) - IMY*sin(YM/180*pi),
+         IIMY = IMX*sin(YM/180*pi) + IMY*cos(YM/180*pi),
+         IIMZ = IMZ
+         )
+
+#atan2 problem!
+# see: https://en.wikipedia.org/wiki/Atan2
+# in this case y < 0 and x < 0 then atan2(y,x) = atan(y/x) - pi
+# atan(0.2919049972*sin(-2.78007981/180*pi)/(-0.0463900947))*180/pi
+#[1] 16.97204 (this is correct for me)
+# atan2(0.2919049972*sin(-2.78007981/180*pi),(-0.0463900947))*180/pi
+# [1] -163.028 (this is not correct for me)
+# (pi + atan2(0.2919049972*sin(-2.78007981/180*pi),(-0.0463900947)))*180/pi
+# [1] 16.97204 (this is correct for me)

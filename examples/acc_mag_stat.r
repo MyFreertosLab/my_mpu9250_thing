@@ -352,6 +352,9 @@ for(i in 1:dim(prova_data)[1]) {
 }
 
 #Normalization
+prova_data_tot <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/imu-cal-data.csv')
+prova_data <- prova_data_tot %>% filter(MV == 1) %>% select(MX, MY, MZ)
+prova_data_acc <- prova_data_tot %>% filter(MV == 1) %>% select(AX, AY, AZ)
 cal_data_m <- prova_data %>% mutate(NRM = sqrt(MX^2+MY^2+MZ^2)) %>% mutate(MX = MX/NRM, MY=MY/NRM, MZ= MZ/NRM) %>% select(MX, MY, MZ)
 cal_data_a <- prova_data_acc %>% mutate(NRM = sqrt(AX^2+AY^2+AZ^2)) %>% mutate(AX = AX/NRM, AY=AY/NRM, AZ= AZ/NRM) %>% select(AX, AY, AZ)
 
@@ -362,7 +365,8 @@ cal_data <- cbind(cal_data_m, cal_data_a)
 #az = -cos(pitch)*cos(roll)
 #roll = atan(ay/az)
 #pitch = atan(ax/ay*sin(roll))
-cal_data_rpy <- cal_data %>% mutate(RA = atan(-AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
+
+cal_data_rpy <- cal_data %>% mutate(RA = atan(AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
   mutate(IMX = MX * cos(PA/180*pi) + MY*sin(PA/180*pi)*sin(RA/180*pi) + MZ*sin(PA/180*pi)*cos(RA/180*pi),
          IMY = MY*cos(RA/180*pi) - MZ*sin(RA/180*pi),
          IMZ = -MX * sin(PA/180*pi) + MY*cos(PA/180*pi)*sin(RA/180*pi) + MZ*cos(PA/180*pi)*cos(RA/180*pi), 
@@ -371,7 +375,8 @@ cal_data_rpy <- cal_data %>% mutate(RA = atan(-AY/AZ)/pi*180) %>% mutate(PA = at
   mutate(IIMX = IMX * cos(YM/180*pi) - IMY*sin(YM/180*pi),
          IIMY = IMX*sin(YM/180*pi) + IMY*cos(YM/180*pi),
          IIMZ = IMZ
-         )
+         ) 
+plot(cal_data_rpy$RA, acos(cal_data_rpy$IIMX)/pi*180)
 
 #atan2 problem!
 # see: https://en.wikipedia.org/wiki/Atan2

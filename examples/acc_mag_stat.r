@@ -366,10 +366,11 @@ cal_data <- cbind(cal_data_m, cal_data_a)
 #roll = atan(ay/az)
 #pitch = atan(ax/ay*sin(roll))
 
-cal_data_rpy <- cal_data %>% mutate(RA = atan(AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
-  mutate(IMX = MX * cos(PA/180*pi) + MY*sin(PA/180*pi)*sin(RA/180*pi) + MZ*sin(PA/180*pi)*cos(RA/180*pi),
+#TODO: controllare gli assi mag rispetto agli assi acc. Sembra che la direzione X sia invertita (il pitch è invertito)
+cal_data_rpy <- cal_data %>% mutate(RA = atan(AY/AZ)/pi*180) %>% mutate(PA = -atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
+  mutate(IMX = MX * cos(-PA/180*pi) + MY*sin(-PA/180*pi)*sin(RA/180*pi) + MZ*sin(-PA/180*pi)*cos(RA/180*pi),
          IMY = MY*cos(RA/180*pi) - MZ*sin(RA/180*pi),
-         IMZ = -MX * sin(PA/180*pi) + MY*cos(PA/180*pi)*sin(RA/180*pi) + MZ*cos(PA/180*pi)*cos(RA/180*pi), 
+         IMZ = -MX * sin(-PA/180*pi) + MY*cos(-PA/180*pi)*sin(RA/180*pi) + MZ*cos(-PA/180*pi)*cos(RA/180*pi), 
          YM = 180 * atan2(-IMY,IMX)/pi
          ) %>% 
   mutate(IIMX = IMX * cos(YM/180*pi) - IMY*sin(YM/180*pi),
@@ -377,6 +378,8 @@ cal_data_rpy <- cal_data %>% mutate(RA = atan(AY/AZ)/pi*180) %>% mutate(PA = ata
          IIMZ = IMZ
          ) 
 plot(cal_data_rpy$RA, acos(cal_data_rpy$IIMX)/pi*180)
+plot(cal_data_rpy$PA, acos(cal_data_rpy$IIMX)/pi*180)
+plot(cal_data_rpy$YM, acos(cal_data_rpy$IIMX)/pi*180)
 
 #atan2 problem!
 # see: https://en.wikipedia.org/wiki/Atan2

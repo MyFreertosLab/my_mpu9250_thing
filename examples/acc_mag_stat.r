@@ -307,7 +307,7 @@ V <- eigen(prova$invA)$vectors
 v1 <- V[,1]
 v2 <- V[,2]
 v3 <- V[,3]
-pitch <- asin(-v1[3])
+pitch <- asin(v1[3])
 yaw <- acos(v1[1]/cos(pitch))
 roll <- asin(v2[3]/cos(pitch))
 print(c("yaw, pitch roll: ", yaw/pi*180, pitch/pi*180, roll/pi*180), quote = FALSE)
@@ -363,21 +363,30 @@ check_data_mag <- cbind(
   prova_data_acc %>% rename(CAX = AX, CAY = AY, CAZ = AZ) %>% select(CAX, CAY, CAZ)
 )
 check_data_mag_rp <- check_data_mag %>% 
-  mutate(NRM = sqrt(AX^2+AY^2+AZ^2)) %>%
-  mutate(RA = atan2(AY,sqrt(AX^2+AZ^2))*f, PA = -atan2(AX,sqrt(AY^2+AZ^2))*f) %>% 
-  mutate(CRA = atan2(CAY,sqrt(CAX^2+CAZ^2))*f, CPA = -atan2(CAX,sqrt(CAY^2+CAZ^2))*f) %>%
-  mutate(ERA = RA - CRA, EPA = PA - CPA) %>%
   filter(abs(AX) > 0) %>%
   filter(abs(AY) > 0) %>%
   filter(abs(AZ) > 0) %>%
+  mutate(NRMA = sqrt(AX^2+AY^2+AZ^2)) %>%
+  mutate(CNRMA = sqrt(CAX^2+CAY^2+CAZ^2)) %>%
+  mutate(NRMM = sqrt(MX^2+MY^2+MZ^2)) %>%
+  mutate(CNRMM = sqrt(CMX^2+CMY^2+CMZ^2)) %>%
+  mutate(CMX = CMX/CNRMM, CMY = CMY/CNRMM, CMZ = CMZ/CNRMM) %>%
+  mutate(CAX = CAX/CNRMA, CAY = CAY/CNRMA, CAZ = CAZ/CNRMA) %>%
+  mutate(PA = -asin(AX/NRMA)*f) %>%
+  mutate(RA = acos(AZ/NRMA/cos(PA/f))*f) %>%
+  mutate(RA = case_when(AY < 0 ~ -RA, TRUE ~ RA)) %>%
+  mutate(CPA = -asin(CAX)*f) %>%
+  mutate(CRA = acos(CAZ/cos(CPA/f))*f) %>%
+  mutate(CRA = case_when(CAY < 0 ~ -CRA, TRUE ~ CRA)) %>%
+  mutate(ERA = RA - CRA, EPA = PA - CPA) %>%
     mutate(
-    ICMX = CMX * cos(CPA/f) + CMZ*sin(CPA/f),
-    ICMY = CMX*sin(CPA/f)*sin(CRA/f) + CMY*cos(CRA/f) - CMZ*cos(CPA/f)*sin(CRA/f),
-    ICMZ = -CMX * sin(CPA/f)*cos(CRA/f) + CMY*sin(CRA/f) + CMZ*cos(CPA/f)*cos(CRA/f), 
+    ICMX = CMX * cos(CPA/f) + CMY*sin(CPA/f)*sin(CRA/f) + CMZ * sin(CPA/f)*cos(CRA/f),
+    ICMY = 0                + CMY*cos(CRA/f)            - CMZ*sin(CRA/f),
+    ICMZ = -CMX*sin(CPA/f)  + CMY*cos(CPA/f)*sin(CRA/f) + CMZ*cos(CPA/f)*cos(CRA/f), 
     CYM = atan2(-ICMY,ICMX)*f,
-    ICAX = CAX * cos(CPA/f) - CAZ*sin(CPA/f),
-    ICAY = CAX*sin(CPA/f)*sin(CRA/f) + CAY*cos(CRA/f) + CAZ*cos(CPA/f)*sin(CRA/f),
-    ICAZ = CAX * sin(CPA/f)*cos(CRA/f) - CAY*sin(CRA/f) + CAZ*cos(CPA/f)*cos(CRA/f), 
+    ICAX = CAX * cos(CPA/f) + CAY*sin(CPA/f)*sin(CRA/f) + CAZ * sin(CPA/f)*cos(CRA/f),
+    ICAY = 0                + CAY*cos(CRA/f)            - CAZ*sin(CRA/f),
+    ICAZ = -CAX*sin(CPA/f)  + CAY*cos(CPA/f)*sin(CRA/f) + CAZ*cos(CPA/f)*cos(CRA/f), 
   ) %>% 
   mutate(
     IICMX = ICMX * cos(CYM/f) - ICMY*sin(CYM/f),
@@ -393,61 +402,13 @@ plot(check_data_mag_rp$CRA, check_data_mag_rp$DEC)
 plot(check_data_mag_rp$CPA, check_data_mag_rp$DEC)
 plot(check_data_mag_rp$CYM, check_data_mag_rp$DEC)
 
-# FIXME: abs(Roll) < 5 or abs(Roll) > 80 => Error on Declination
-P <- check_data_mag_rp %>% filter(abs(DEC) < 50)
-P0 <- as.matrix(P %>% select(DEC))
-P1 <- as.matrix(P %>% select(CRA))
-P2 <- as.matrix(P %>% select(CYM))
-P3 <- as.matrix(P %>% select(IICMX))
-plot(P1, P2, ylab = "Yaw", xlab = "Roll", main = "abs(DEC) < 50")
-plot(P1, P0, ylab = "Dec", xlab = "Roll", main = "abs(DEC) < 50")
-plot(P3, P0, ylab = "Dec", xlab = "IICMX", main = "abs(DEC) < 50")
-
-plot(check_data_mag_rp$PA, check_data_mag_rp$EPA)
-plot(check_data_mag_rp$RA, check_data_mag_rp$ERA)
-
 
 ############################################################################################################################
 ##### Prove filtro after calibration
 ############################################################################################################################
-prova_data_tot <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/imu-cal-data.csv')
-prova_data <- prova_data_tot %>% filter(MV == 1) %>% select(MX, MY, MZ)
-prova_data_acc <- prova_data_tot %>% filter(MV == 1) %>% select(AX, AY, AZ)
-mag_plot_data(prova_data %>% select(MX, MY, MZ))
-mag_plot_data(prova_data_acc %>% select(AX, AY, AZ))
-
-#Normalization
-cal_data_m <- prova_data %>% mutate(NRM = sqrt(MX^2+MY^2+MZ^2)) %>% mutate(MX = MX/NRM, MY=MY/NRM, MZ= MZ/NRM) %>% select(MX, MY, MZ)
-cal_data_a <- prova_data_acc %>% mutate(NRM = sqrt(AX^2+AY^2+AZ^2)) %>% mutate(AX = AX/NRM, AY=AY/NRM, AZ= AZ/NRM) %>% select(AX, AY, AZ)
-cal_data <- cbind(cal_data_m, cal_data_a)
-
-#Calc roll, pitch and yaw
-cal_data_rpy <- cal_data %>% mutate(RA = -atan(AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
-  filter(abs(AY) > 0) %>%
-  mutate(
-         IMX = MX * cos(PA/180*pi) - MZ*sin(PA/180*pi),
-         IMY = MX*sin(PA/180*pi)*sin(RA/180*pi) + MY*cos(RA/180*pi) + MZ*cos(PA/180*pi)*sin(RA/180*pi),
-         IMZ = MX * sin(PA/180*pi)*cos(RA/180*pi) - MY*sin(RA/180*pi) + MZ*cos(PA/180*pi)*cos(RA/180*pi), 
-         YM = 180 * atan2(-IMY,IMX)/pi,
-         IAX = AX * cos(PA/180*pi) - AZ*sin(PA/180*pi),
-         IAY = AX*sin(PA/180*pi)*sin(RA/180*pi) + AY*cos(RA/180*pi) + AZ*cos(PA/180*pi)*sin(RA/180*pi),
-         IAZ = AX * sin(PA/180*pi)*cos(RA/180*pi) - AY*sin(RA/180*pi) + AZ*cos(PA/180*pi)*cos(RA/180*pi), 
-         ) %>% 
-  mutate(
-         IIMX = IMX * cos(YM/180*pi) - IMY*sin(YM/180*pi),
-         IIMY = IMX*sin(YM/180*pi) + IMY*cos(YM/180*pi),
-         IIMZ = IMZ,
-         IIAX = IAX * cos(YM/180*pi) - IAY*sin(YM/180*pi),
-         IIAY = IAX*sin(YM/180*pi) + IAY*cos(YM/180*pi),
-         IIAZ = IAZ
-         )
-
-#plot magnetic vertical declination
-plot(cal_data_rpy$RA, acos(cal_data_rpy$IIMX)/pi*180)
-plot(cal_data_rpy$PA, acos(cal_data_rpy$IIMX)/pi*180)
-plot(cal_data_rpy$YM, acos(cal_data_rpy$IIMX)/pi*180)
-
 # angolo verticale magnetico = 58.21deg
+# dati già forniti normalizzati ed in inertial frame
+cal_data_rpy <- check_data_mag_rp %>% select(CPA, CRA, CYM, AX, AY, AZ, MX, MY, MZ, IICMX, IICMY, IICMZ, IICAX, IICAY, IICAZ) %>% rename(YM=CYM, PA=CPA, RA=CRA, IIMX=IICMX,IIMY=IICMY, IIMZ=IICMZ, IIAX=IICAX, IIAY=IICAY, IIAZ=IICAZ)
 mrad <- 58.21/180*pi
 mrx <- cos(mrad)
 mrz <- -sin(mrad)
@@ -479,35 +440,34 @@ PArz <- t(t(as.matrix(cal_data_rpy_model_coeff_arz)) %*% t(as.matrix(cal_data_rp
 
 cal_data_rpy_corr <- cbind(cal_data_rpy, PMrx,PMry,PMrz,PArx,PAry,PArz)
 
-plot(cal_data_rpy_corr$RA, acos(cal_data_rpy_corr$PMrx)/pi*180, ylim = c(55,65))
-plot(cal_data_rpy_corr$PA, acos(cal_data_rpy_corr$PMrx)/pi*180, ylim = c(55,65))
-plot(cal_data_rpy_corr$YM, acos(cal_data_rpy_corr$PMrx)/pi*180, ylim = c(55,65))
+plot(cal_data_rpy_corr$RA, acos(cal_data_rpy_corr$PMrx)/f, ylim = c(55,65))
+plot(cal_data_rpy_corr$PA, acos(cal_data_rpy_corr$PMrx)/f, ylim = c(55,65))
+plot(cal_data_rpy_corr$YM, acos(cal_data_rpy_corr$PMrx)/f, ylim = c(55,65))
 
+# T.B.D.: Tutto da rivedere
 # Rilevazioni corrette ruotate in body frame
-f <- 1/180*pi
+f <- pi/180
 cal_data_rpy <- cal_data_rpy_corr %>% 
-  mutate(MDEC = acos(IIMX)/pi*180) %>%
-  mutate(CMDEC = acos(PMrx)/pi*180) %>%
+  mutate(MDEC = acos(IIMX)/f) %>%
+  mutate(CMDEC = acos(PMrx)/f) %>%
   mutate(
-    YPMrx = cos(YM*f)*PMrx + sin(YM*f)*PMry,
-    YPMry = -sin(YM*f)*PMrx + cos(YM*f)*PMry,
+    YPMrx = cos(YM/f)*PMrx + sin(YM/f)*PMry,
+    YPMry = -sin(YM/f)*PMrx + cos(YM/f)*PMry,
     YPMrz = PMrz,
-    YPArx = cos(YM*f)*PArx + sin(YM*f)*PAry,
-    YPAry = -sin(YM*f)*PArx + cos(YM*f)*PAry,
+    YPArx = cos(YM/f)*PArx + sin(YM/f)*PAry,
+    YPAry = -sin(YM/f)*PArx + cos(YM/f)*PAry,
     YPArz = PArz
   ) %>%
   mutate(
-   CMX = cos(PA*f)*YPMrx + sin(PA*f)*sin(RA*f)*YPMry + sin(PA*f)*cos(RA*f)*YPMrz, 
-   CMY = cos(RA*f)*YPMry - sin(RA*f)*YPMrz, 
-   CMZ = -sin(PA*f)*YPMrx + cos(PA*f)*sin(RA*f)*YPMry +cos(PA*f)*cos(RA*f)*YPMrz , 
-   CAX = cos(PA*f)*YPArx + sin(PA*f)*sin(RA*f)*YPAry + sin(PA*f)*cos(RA*f)*YPArz, 
-   CAY = cos(RA*f)*YPAry - sin(RA*f)*YPArz, 
-   CAZ = -sin(PA*f)*YPArx + cos(PA*f)*sin(RA*f)*YPAry +cos(PA*f)*cos(RA*f)*YPArz 
-  ) %>% 
-  mutate(CRA = -atan(CAY/CAZ)/pi*180) %>% 
-  mutate(CPA = atan(CAX*sin(RA/180*pi)/-CAY)/pi*180)
+   CMX = cos(PA/f)*YPMrx + 0                         - sin(PA/f)*YPMrz, 
+   CMY = sin(PA/f)*sin(RA/f)*YPMrx + cos(RA/f)*YPMry + cos(PA/f)*sin(RA/f)*YPMrz,
+   CMZ = sin(PA/f)*cos(RA/f)*YPMrx - sin(RA/f)*YPMry + cos(PA/f)*cos(RA/f)*YPMrz,
+   CAX = cos(PA/f)*YPArx + 0                         - sin(PA/f)*YPMrz, 
+   CAY = sin(PA/f)*sin(RA/f)*YPArx + cos(RA/f)*YPAry + cos(PA/f)*sin(RA/f)*YPArz,
+   CAZ = sin(PA/f)*cos(RA/f)*YPArx - sin(RA/f)*YPAry + cos(PA/f)*cos(RA/f)*YPArz,
+  )
 
-cal_data_ang <- cal_data_rpy %>% select(RA, PA, YM, CRA, CPA, MDEC, CMDEC) %>% mutate(ERA = CRA - RA, EPA = CPA - PA)
+cal_data_ang <- cal_data_rpy %>% select(RA, PA, YM, MDEC, CMDEC)
 
 IMF <- matrix(c(
   cal_data_rpy_model_coeff_mrx, 

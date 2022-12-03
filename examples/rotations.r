@@ -6,10 +6,10 @@
 ###      | /x                                                         ###
 ###  y___|/                                                           ###
 #########################################################################
-rm(list = ls())
+#rm(list = ls())
 toRad=pi/180
-roll=-10*toRad
-pitch=120*toRad
+roll=-1.600485e+00*toRad
+pitch=7.496511*toRad
 
 # Range Roll [-pi, pi]
 # Range Pitch [-pi/2, pi/2]

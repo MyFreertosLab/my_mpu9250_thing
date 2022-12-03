@@ -1,6 +1,6 @@
 toRad=pi/180
-roll=-179*toRad
-pitch=-89*toRad
+roll=190*toRad
+pitch=-90*toRad
 yaw=0*toRad
 m <- c(cos(yaw)*cos(pitch), cos(yaw)*sin(pitch)*sin(roll) - sin(yaw)*cos(roll), cos(yaw)*sin(pitch)*cos(roll)+sin(yaw)*sin(roll), 
        sin(yaw)*cos(pitch), sin(yaw)*sin(pitch)*sin(roll) + cos(yaw)*cos(roll), sin(yaw)*sin(pitch)*cos(roll)-cos(yaw)*sin(roll),
@@ -32,8 +32,13 @@ if(BUz[3] >= 0) {
   roll_calc = -pi+asin(BUz[2])
   pitch_calc = acos(BUz[3]/cos(roll_calc))
   if(BUz[1] >= 0) {
-    pitch_calc = pitch_calc
+    pitch_calc = -pitch_calc
   }
+}
+if(roll_calc > pi) {
+  roll_calc = roll_calc - 2*pi
+} else if(roll_calc < -pi) {
+  roll_calc = roll_calc + 2*pi
 }
 print(c("BUz roll: ", roll_calc/toRad, " must be: ", roll/toRad), quote = FALSE)
 print(c("BUz pitch: ", pitch_calc/toRad, " must be: ", pitch/toRad), quote = FALSE)

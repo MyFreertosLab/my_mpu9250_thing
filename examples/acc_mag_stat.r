@@ -11,7 +11,7 @@ library(plot3Drgl)
 options(rgl.printRglwidget = TRUE)
 # mvmeta for symmetric matrix vectorization (vechMat)
 library(mvmeta)
-imu.data.mag <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
+imu.data.mag <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-acc.csv')
   
 imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
 imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
@@ -273,8 +273,8 @@ mag_apply_estimator <- function(mag_model) {
   return(as.data.frame(mag_data_target))
 }
 
-mag_plot_data <- function(mag_data, sphere_radius = -1) {
-  scatter3D(mag_data[,1], mag_data[,2], mag_data[,3], colvar = mag_data[,3], col = NULL, add = FALSE, scale = FALSE, ticktype = "detailed")
+mag_plot_data <- function(mag_data, sphere_radius = -1, title = "") {
+  scatter3D(mag_data[,1], mag_data[,2], mag_data[,3], colvar = mag_data[,3], col = NULL, add = FALSE, scale = FALSE, ticktype = "detailed", main = title)
   plotrgl()
   rglwidget()
 }
@@ -352,22 +352,76 @@ for(i in 1:dim(prova_data)[1]) {
 }
 calibrated_data_tot <- cbind(prova_data, prova_data_acc)
 
-#Normalization
+############################################################################################################################
+##### Check pitch, roll
+############################################################################################################################
+f = 1/pi*180
+check_data_mag <- cbind(
+  imu.data.body %>% mutate(MX = MX - prova$offset[1], MY = MY - prova$offset[2], MZ = MZ - prova$offset[3]) %>% select(MX, MY, MZ), 
+  prova_data %>% rename(CMX = MX, CMY = MY, CMZ = MZ) %>% select(CMX, CMY, CMZ),
+  imu.data.acc %>% mutate(AX = AX - prova_acc$offset[1], AY = AY - prova_acc$offset[2], AZ = AZ - prova_acc$offset[3]) %>% select(AX, AY, AZ), 
+  prova_data_acc %>% rename(CAX = AX, CAY = AY, CAZ = AZ) %>% select(CAX, CAY, CAZ)
+)
+check_data_mag_rp <- check_data_mag %>% 
+  mutate(NRM = sqrt(AX^2+AY^2+AZ^2)) %>%
+  mutate(RA = atan2(AY,sqrt(AX^2+AZ^2))*f, PA = -atan2(AX,sqrt(AY^2+AZ^2))*f) %>% 
+  mutate(CRA = atan2(CAY,sqrt(CAX^2+CAZ^2))*f, CPA = -atan2(CAX,sqrt(CAY^2+CAZ^2))*f) %>%
+  mutate(ERA = RA - CRA, EPA = PA - CPA) %>%
+  filter(abs(AX) > 0) %>%
+  filter(abs(AY) > 0) %>%
+  filter(abs(AZ) > 0) %>%
+    mutate(
+    ICMX = CMX * cos(CPA/f) + CMZ*sin(CPA/f),
+    ICMY = CMX*sin(CPA/f)*sin(CRA/f) + CMY*cos(CRA/f) - CMZ*cos(CPA/f)*sin(CRA/f),
+    ICMZ = -CMX * sin(CPA/f)*cos(CRA/f) + CMY*sin(CRA/f) + CMZ*cos(CPA/f)*cos(CRA/f), 
+    CYM = atan2(-ICMY,ICMX)*f,
+    ICAX = CAX * cos(CPA/f) - CAZ*sin(CPA/f),
+    ICAY = CAX*sin(CPA/f)*sin(CRA/f) + CAY*cos(CRA/f) + CAZ*cos(CPA/f)*sin(CRA/f),
+    ICAZ = CAX * sin(CPA/f)*cos(CRA/f) - CAY*sin(CRA/f) + CAZ*cos(CPA/f)*cos(CRA/f), 
+  ) %>% 
+  mutate(
+    IICMX = ICMX * cos(CYM/f) - ICMY*sin(CYM/f),
+    IICMY = ICMX*sin(CYM/f) + ICMY*cos(CYM/f),
+    IICMZ = ICMZ,
+    IICAX = ICAX * cos(CYM/f) - ICAY*sin(CYM/f),
+    IICAY = ICAX*sin(CYM/f) + ICAY*cos(CYM/f),
+    IICAZ = ICAZ
+  ) %>%
+  mutate(DEC = acos(IICMX/sqrt(IICMX^2+IICMY^2+IICMZ^2))*f)
+
+plot(check_data_mag_rp$CRA, check_data_mag_rp$DEC)
+plot(check_data_mag_rp$CPA, check_data_mag_rp$DEC)
+plot(check_data_mag_rp$CYM, check_data_mag_rp$DEC)
+
+# FIXME: abs(Roll) < 5 or abs(Roll) > 80 => Error on Declination
+P <- check_data_mag_rp %>% filter(abs(DEC) < 50)
+P0 <- as.matrix(P %>% select(DEC))
+P1 <- as.matrix(P %>% select(CRA))
+P2 <- as.matrix(P %>% select(CYM))
+P3 <- as.matrix(P %>% select(IICMX))
+plot(P1, P2, ylab = "Yaw", xlab = "Roll", main = "abs(DEC) < 50")
+plot(P1, P0, ylab = "Dec", xlab = "Roll", main = "abs(DEC) < 50")
+plot(P3, P0, ylab = "Dec", xlab = "IICMX", main = "abs(DEC) < 50")
+
+plot(check_data_mag_rp$PA, check_data_mag_rp$EPA)
+plot(check_data_mag_rp$RA, check_data_mag_rp$ERA)
+
+
+############################################################################################################################
+##### Prove filtro after calibration
+############################################################################################################################
 prova_data_tot <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/imu-cal-data.csv')
 prova_data <- prova_data_tot %>% filter(MV == 1) %>% select(MX, MY, MZ)
 prova_data_acc <- prova_data_tot %>% filter(MV == 1) %>% select(AX, AY, AZ)
+mag_plot_data(prova_data %>% select(MX, MY, MZ))
+mag_plot_data(prova_data_acc %>% select(AX, AY, AZ))
+
+#Normalization
 cal_data_m <- prova_data %>% mutate(NRM = sqrt(MX^2+MY^2+MZ^2)) %>% mutate(MX = MX/NRM, MY=MY/NRM, MZ= MZ/NRM) %>% select(MX, MY, MZ)
 cal_data_a <- prova_data_acc %>% mutate(NRM = sqrt(AX^2+AY^2+AZ^2)) %>% mutate(AX = AX/NRM, AY=AY/NRM, AZ= AZ/NRM) %>% select(AX, AY, AZ)
-
 cal_data <- cbind(cal_data_m, cal_data_a)
-#g = (0,0,-1)
-#ax = sin(pitch)
-#ay = -cos(pitch)*sin(roll)
-#az = -cos(pitch)*cos(roll)
-#roll = atan(ay/az)
-#pitch = atan(ax/ay*sin(roll))
 
-#TODO: controllare gli assi mag rispetto agli assi acc. Sembra che la direzione X sia invertita (il pitch è invertito)
+#Calc roll, pitch and yaw
 cal_data_rpy <- cal_data %>% mutate(RA = -atan(AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180) %>% 
   filter(abs(AY) > 0) %>%
   mutate(
@@ -388,6 +442,7 @@ cal_data_rpy <- cal_data %>% mutate(RA = -atan(AY/AZ)/pi*180) %>% mutate(PA = at
          IIAZ = IAZ
          )
 
+#plot magnetic vertical declination
 plot(cal_data_rpy$RA, acos(cal_data_rpy$IIMX)/pi*180)
 plot(cal_data_rpy$PA, acos(cal_data_rpy$IIMX)/pi*180)
 plot(cal_data_rpy$YM, acos(cal_data_rpy$IIMX)/pi*180)
@@ -431,6 +486,8 @@ plot(cal_data_rpy_corr$YM, acos(cal_data_rpy_corr$PMrx)/pi*180, ylim = c(55,65))
 # Rilevazioni corrette ruotate in body frame
 f <- 1/180*pi
 cal_data_rpy <- cal_data_rpy_corr %>% 
+  mutate(MDEC = acos(IIMX)/pi*180) %>%
+  mutate(CMDEC = acos(PMrx)/pi*180) %>%
   mutate(
     YPMrx = cos(YM*f)*PMrx + sin(YM*f)*PMry,
     YPMry = -sin(YM*f)*PMrx + cos(YM*f)*PMry,
@@ -449,6 +506,20 @@ cal_data_rpy <- cal_data_rpy_corr %>%
   ) %>% 
   mutate(CRA = -atan(CAY/CAZ)/pi*180) %>% 
   mutate(CPA = atan(CAX*sin(RA/180*pi)/-CAY)/pi*180)
+
+cal_data_ang <- cal_data_rpy %>% select(RA, PA, YM, CRA, CPA, MDEC, CMDEC) %>% mutate(ERA = CRA - RA, EPA = CPA - PA)
+
+IMF <- matrix(c(
+  cal_data_rpy_model_coeff_mrx, 
+  cal_data_rpy_model_coeff_mry, 
+  cal_data_rpy_model_coeff_mrz,
+  cal_data_rpy_model_coeff_arx, 
+  cal_data_rpy_model_coeff_ary, 
+  cal_data_rpy_model_coeff_arz
+), nrow = 6, ncol = 6, byrow = TRUE
+)
+
+
 
 # Ricalcolo la matrice dei coefficienti in body frame
 cal_data_rpy_model_b_fit_cmx <- lm(CMX ~ . - 1, cal_data_rpy %>% select(CMX, MX, MY, MZ, AX, AY, AZ))
@@ -484,10 +555,10 @@ mag_apply_filter <- function(mag_acc_data, mf) {
 }
 calibrated_data_filtered <- mag_apply_filter(cal_data_rpy %>% select(MX, MY, MZ, AX, AY, AZ), MF)
 
-mag_plot_data(cal_data_rpy %>% select(MX, MY, MZ))
-mag_plot_data(calibrated_data_filtered %>% select(MX, MY, MZ) )
-mag_plot_data(cal_data_rpy %>% select(AX, AY, AZ))
-mag_plot_data(calibrated_data_filtered %>% select(AX, AY, AZ) )
+mag_plot_data(cal_data_rpy %>% select(MX, MY, MZ), title = "mag original")
+mag_plot_data(calibrated_data_filtered %>% select(MX, MY, MZ) , title = "mag filtered")
+mag_plot_data(cal_data_rpy %>% select(AX, AY, AZ), title = "acc original")
+mag_plot_data(calibrated_data_filtered %>% select(AX, AY, AZ), title = "acc filtered" )
 mag_plot_data(cal_data_rpy %>% select(CMX, CMY, CMZ))
 mag_plot_data(cal_data_rpy %>% select(CAX, CAY, CAZ))
 

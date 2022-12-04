@@ -355,7 +355,7 @@ calibrated_data_tot <- cbind(prova_data, prova_data_acc)
 ############################################################################################################################
 ##### Check pitch, roll
 ############################################################################################################################
-f = 1/pi*180
+f = 180/pi
 check_data_mag <- cbind(
   imu.data.body %>% mutate(MX = MX - prova$offset[1], MY = MY - prova$offset[2], MZ = MZ - prova$offset[3]) %>% select(MX, MY, MZ), 
   prova_data %>% rename(CMX = MX, CMY = MY, CMZ = MZ) %>% select(CMX, CMY, CMZ),
@@ -375,11 +375,15 @@ check_data_mag_rp <- check_data_mag %>%
   mutate(PA = -asin(AX/NRMA)*f) %>%
   mutate(RA = acos(AZ/NRMA/cos(PA/f))*f) %>%
   mutate(RA = case_when(AY < 0 ~ -RA, TRUE ~ RA)) %>%
+  mutate(RA = case_when(RA/f > pi ~ (RA/f-2*pi)*f,RA/f < -pi ~ (RA/f+2*pi)*f, TRUE ~ RA)) %>%
   mutate(CPA = -asin(CAX)*f) %>%
   mutate(CRA = acos(CAZ/cos(CPA/f))*f) %>%
   mutate(CRA = case_when(CAY < 0 ~ -CRA, TRUE ~ CRA)) %>%
+  mutate(CRA = case_when(CRA/f > pi ~ (CRA/f-2*pi)*f,CRA/f < -pi ~ (CRA/f+2*pi)*f, TRUE ~ CRA)) %>%
   mutate(ERA = RA - CRA, EPA = PA - CPA) %>%
-    mutate(
+  ## FIXME: vedere meglio come coreggere i casi con segno inverso (es. 179 e -179 => ERA = +2 o -2)
+  mutate(ERA = case_when(abs(ERA)/f > pi ~ RA + CRA,TRUE ~ ERA)) %>% 
+  mutate(
     ICMX = CMX * cos(CPA/f) + CMY*sin(CPA/f)*sin(CRA/f) + CMZ * sin(CPA/f)*cos(CRA/f),
     ICMY = 0                + CMY*cos(CRA/f)            - CMZ*sin(CRA/f),
     ICMZ = -CMX*sin(CPA/f)  + CMY*cos(CPA/f)*sin(CRA/f) + CMZ*cos(CPA/f)*cos(CRA/f), 
@@ -408,7 +412,7 @@ plot(check_data_mag_rp$CYM, check_data_mag_rp$DEC)
 ############################################################################################################################
 # angolo verticale magnetico = 58.21deg
 # dati già forniti normalizzati ed in inertial frame
-cal_data_rpy <- check_data_mag_rp %>% select(CPA, CRA, CYM, AX, AY, AZ, MX, MY, MZ, IICMX, IICMY, IICMZ, IICAX, IICAY, IICAZ) %>% rename(YM=CYM, PA=CPA, RA=CRA, IIMX=IICMX,IIMY=IICMY, IIMZ=IICMZ, IIAX=IICAX, IIAY=IICAY, IIAZ=IICAZ)
+cal_data_rpy <- check_data_mag_rp %>% select(CPA, CRA, CYM, CMX, CMY, CMZ, CAX, CAY, CAZ, IICMX, IICMY, IICMZ, IICAX, IICAY, IICAZ) %>% rename(YM=CYM, PA=CPA, RA=CRA, MX=CMX, MY=CMY, MZ=CMZ, AX=CAX,AY=CAY, AZ=CAZ, IIMX=IICMX,IIMY=IICMY, IIMZ=IICMZ, IIAX=IICAX, IIAY=IICAY, IIAZ=IICAZ)
 mrad <- 58.21/180*pi
 mrx <- cos(mrad)
 mrz <- -sin(mrad)
@@ -445,11 +449,11 @@ plot(cal_data_rpy_corr$RA, acos(cal_data_rpy_corr$PMrx)*f, ylim = c(55,65))
 plot(cal_data_rpy_corr$PA, acos(cal_data_rpy_corr$PMrx)*f, ylim = c(55,65))
 plot(cal_data_rpy_corr$YM, acos(cal_data_rpy_corr$PMrx)*f, ylim = c(55,65))
 
-# T.B.D.: Tutto da rivedere
 # Rilevazioni corrette ruotate in body frame
 cal_data_rpy <- cal_data_rpy_corr %>% 
   mutate(MDEC = acos(IIMX)*f) %>%
   mutate(CMDEC = acos(PMrx)*f) %>%
+  mutate(EMDEC = CMDEC - MDEC) %>%
   mutate(
     YPMrx = cos(YM/f)*PMrx + sin(YM/f)*PMry,
     YPMry = -sin(YM/f)*PMrx + cos(YM/f)*PMry,
@@ -462,12 +466,12 @@ cal_data_rpy <- cal_data_rpy_corr %>%
    CMX = cos(PA/f)*YPMrx + 0                         - sin(PA/f)*YPMrz, 
    CMY = sin(PA/f)*sin(RA/f)*YPMrx + cos(RA/f)*YPMry + cos(PA/f)*sin(RA/f)*YPMrz,
    CMZ = sin(PA/f)*cos(RA/f)*YPMrx - sin(RA/f)*YPMry + cos(PA/f)*cos(RA/f)*YPMrz,
-   CAX = cos(PA/f)*YPArx + 0                         - sin(PA/f)*YPMrz, 
+   CAX = cos(PA/f)*YPArx + 0                         - sin(PA/f)*YPArz, 
    CAY = sin(PA/f)*sin(RA/f)*YPArx + cos(RA/f)*YPAry + cos(PA/f)*sin(RA/f)*YPArz,
    CAZ = sin(PA/f)*cos(RA/f)*YPArx - sin(RA/f)*YPAry + cos(PA/f)*cos(RA/f)*YPArz,
   )
 
-cal_data_ang <- cal_data_rpy %>% select(RA, PA, YM, MDEC, CMDEC)
+cal_data_ang <- cal_data_rpy %>% mutate(EM = ((MX*CMX+MY*CMY+MZ*CMZ)/(sqrt(MX^2+MY^2+MZ^2)*sqrt(CMX^2+CMY^2+CMZ^2)))*f) %>% select(RA, PA, YM, EM, MDEC, CMDEC, EMDEC, MX, CMX, MY, CMY, MZ, CMZ)
 
 IMF <- matrix(c(
   cal_data_rpy_model_coeff_mrx, 
@@ -478,7 +482,6 @@ IMF <- matrix(c(
   cal_data_rpy_model_coeff_arz
 ), nrow = 6, ncol = 6, byrow = TRUE
 )
-
 
 
 # Ricalcolo la matrice dei coefficienti in body frame
@@ -523,37 +526,10 @@ mag_plot_data(cal_data_rpy %>% select(CMX, CMY, CMZ))
 mag_plot_data(cal_data_rpy %>% select(CAX, CAY, CAZ))
 
 
-prova_data_tot <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/imu-cal-data.csv')
-mag_plot_data(prova_data_tot %>% filter(MV == 1) %>% select(MX, MY, MZ))
-mag_plot_data(prova_data_tot %>% filter(MV == 1) %>% select(AX, AY, AZ))
+# Valutazioni:
+na=c(0.027612836, -0.034572874, 0.9990206)
+ca = c(1.107533e-02, -0.0246001522, 0.9996360)
+acos(na %*% ca)*f
+1.107248
 
-pdt <- prova_data_tot %>% mutate(RA = -atan(AY/AZ)/pi*180) %>% mutate(PA = atan(AX*sin(RA/180*pi)/-AY)/pi*180)
-
-#TODO: 
-# 1- Normalizzare
-# 2- Creare matrice dei coefficienti
-# 3- Eseguire trasformazione A*t([iimx,iimy,iimz,iiax,iiay,iiaz]) ottenendo t([PMrx, PMry, PMrz, PArx,PAry, PArz])
-# 4- Ruotare il vettore ottenuto sostituendo i dati ricevuti dal sensore
-# 5- Plot dei dati corretti
-
-mean(acos(PMrx)/pi*180)
-sd(acos(PMrx)/pi*180)
-mean(90 + asin(PMrz)/pi*180)
-sd(90 + asin(PMrz)/pi*180)
-mean(acos(PArz)/pi*180)
-sd(acos(PArz)/pi*180)
-
-mean(cal_data_rpy_err$EANG)
-sd(cal_data_rpy_err$EANG)
-min(cal_data_rpy_err$EANG)
-max(cal_data_rpy_err$EANG)
-
-#atan2 problem!
-# see: https://en.wikipedia.org/wiki/Atan2
-# in this case y < 0 and x < 0 then atan2(y,x) = atan(y/x) - pi
-# atan(0.2919049972*sin(-2.78007981/180*pi)/(-0.0463900947))*180/pi
-#[1] 16.97204 (this is correct for me)
-# atan2(0.2919049972*sin(-2.78007981/180*pi),(-0.0463900947))*180/pi
-# [1] -163.028 (this is not correct for me)
-# (pi + atan2(0.2919049972*sin(-2.78007981/180*pi),(-0.0463900947)))*180/pi
-# [1] 16.97204 (this is correct for me)
+ 

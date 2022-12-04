@@ -11,7 +11,7 @@ library(plot3Drgl)
 options(rgl.printRglwidget = TRUE)
 # mvmeta for symmetric matrix vectorization (vechMat)
 library(mvmeta)
-imu.data.mag <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-acc.csv')
+imu.data.mag <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
   
 imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
 imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
@@ -434,22 +434,22 @@ cal_data_rpy_model_coeff_arz <- cal_data_rpy_model_fit_arz$coefficients
 PMrx <- t(t(as.matrix(cal_data_rpy_model_coeff_mrx)) %*% t(as.matrix(cal_data_rpy_model %>% select(IIMX, IIMY, IIMZ, IIAX, IIAY, IIAZ))))
 PMry <- t(t(as.matrix(cal_data_rpy_model_coeff_mry)) %*% t(as.matrix(cal_data_rpy_model %>% select(IIMX, IIMY, IIMZ, IIAX, IIAY, IIAZ))))
 PMrz <- t(t(as.matrix(cal_data_rpy_model_coeff_mrz)) %*% t(as.matrix(cal_data_rpy_model %>% select(IIMX, IIMY, IIMZ, IIAX, IIAY, IIAZ))))
+
 PArx <- t(t(as.matrix(cal_data_rpy_model_coeff_arx)) %*% t(as.matrix(cal_data_rpy_model %>% select(IIMX, IIMY, IIMZ, IIAX, IIAY, IIAZ))))
 PAry <- t(t(as.matrix(cal_data_rpy_model_coeff_ary)) %*% t(as.matrix(cal_data_rpy_model %>% select(IIMX, IIMY, IIMZ, IIAX, IIAY, IIAZ))))
 PArz <- t(t(as.matrix(cal_data_rpy_model_coeff_arz)) %*% t(as.matrix(cal_data_rpy_model %>% select(IIMX, IIMY, IIMZ, IIAX, IIAY, IIAZ))))
 
 cal_data_rpy_corr <- cbind(cal_data_rpy, PMrx,PMry,PMrz,PArx,PAry,PArz)
 
-plot(cal_data_rpy_corr$RA, acos(cal_data_rpy_corr$PMrx)/f, ylim = c(55,65))
-plot(cal_data_rpy_corr$PA, acos(cal_data_rpy_corr$PMrx)/f, ylim = c(55,65))
-plot(cal_data_rpy_corr$YM, acos(cal_data_rpy_corr$PMrx)/f, ylim = c(55,65))
+plot(cal_data_rpy_corr$RA, acos(cal_data_rpy_corr$PMrx)*f, ylim = c(55,65))
+plot(cal_data_rpy_corr$PA, acos(cal_data_rpy_corr$PMrx)*f, ylim = c(55,65))
+plot(cal_data_rpy_corr$YM, acos(cal_data_rpy_corr$PMrx)*f, ylim = c(55,65))
 
 # T.B.D.: Tutto da rivedere
 # Rilevazioni corrette ruotate in body frame
-f <- pi/180
 cal_data_rpy <- cal_data_rpy_corr %>% 
-  mutate(MDEC = acos(IIMX)/f) %>%
-  mutate(CMDEC = acos(PMrx)/f) %>%
+  mutate(MDEC = acos(IIMX)*f) %>%
+  mutate(CMDEC = acos(PMrx)*f) %>%
   mutate(
     YPMrx = cos(YM/f)*PMrx + sin(YM/f)*PMry,
     YPMry = -sin(YM/f)*PMrx + cos(YM/f)*PMry,

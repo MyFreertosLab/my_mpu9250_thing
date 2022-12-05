@@ -518,18 +518,10 @@ mag_apply_filter <- function(mag_acc_data, mf) {
 }
 calibrated_data_filtered <- mag_apply_filter(cal_data_rpy %>% select(MX, MY, MZ, AX, AY, AZ), MF)
 
-mag_plot_data(cal_data_rpy %>% select(MX, MY, MZ), title = "mag original")
-mag_plot_data(calibrated_data_filtered %>% select(MX, MY, MZ) , title = "mag filtered")
-mag_plot_data(cal_data_rpy %>% select(AX, AY, AZ), title = "acc original")
-mag_plot_data(calibrated_data_filtered %>% select(AX, AY, AZ), title = "acc filtered" )
-mag_plot_data(cal_data_rpy %>% select(CMX, CMY, CMZ))
-mag_plot_data(cal_data_rpy %>% select(CAX, CAY, CAZ))
+#mag_plot_data(cal_data_rpy %>% select(MX, MY, MZ), title = "mag original")
+#mag_plot_data(calibrated_data_filtered %>% select(MX, MY, MZ) , title = "mag filtered")
+#mag_plot_data(cal_data_rpy %>% select(AX, AY, AZ), title = "acc original")
+#mag_plot_data(calibrated_data_filtered %>% select(AX, AY, AZ), title = "acc filtered" )
 
-
-# Valutazioni:
-na=c(0.027612836, -0.034572874, 0.9990206)
-ca = c(1.107533e-02, -0.0246001522, 0.9996360)
-acos(na %*% ca)*f
-1.107248
 
  

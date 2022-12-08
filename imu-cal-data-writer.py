@@ -27,14 +27,16 @@ class CalDataFields(ctypes.Structure):
         ("mz",   ctypes.c_float),
         ("mag_drdy",   ctypes.c_uint8),
         ("dummy",   ctypes.c_uint8),
+        ("dummy1",   ctypes.c_uint16),
+        ("ts",   ctypes.c_uint32),
     ]
 
 
 def parse_cal_data_payload(cal_data):
-  fmt = "<fffhhhhfffBB"
+  fmt = "<fffhhhhfffBBhI"
   fmt_size = struct.calcsize(fmt)
   k = CalDataFields();
-  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.dummy = struct.unpack(fmt, cal_data[:fmt_size])
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.dummy, k.dummy1, k.ts = struct.unpack(fmt, cal_data[:fmt_size])
   return k
   
 def cal_data_renderer_function(name, in_queue):
@@ -43,16 +45,16 @@ def cal_data_renderer_function(name, in_queue):
     
     with open("imu-cal-data.csv", "w") as file:
       writer = csv.writer(file, delimiter = ',')
-      record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV']
+      record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV', 'TS']
       writer.writerow(record)
       while True:
         payload = in_queue.get()
         len_payload = len(payload)
-        if len_payload != 36:
+        if len_payload != 40:
           print(f"len(payoad) by {len_payload}")
           continue
         k = parse_cal_data_payload(payload)
-        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy], dtype=np.double)
+        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.ts])
         writer.writerow(record)
 
 def socket_receiver_function(name, out_queue):
@@ -79,8 +81,8 @@ def socket_receiver_function(name, out_queue):
               elif prefix == "<CN>".encode():
                  suffix = '</CN>'.encode()
               else:
-                 print("Wrong Prefix! {}".format(prefix))
-                 data_prev = ''.encode()
+                 print("Wrong Prefix! {} start: {}, end: {}, data size: {}".format(prefix,start_pos,end_pos,len(data)))
+                 data_prev = prefix
                  break
 
               payload_start_pos = end_pos

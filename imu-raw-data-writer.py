@@ -36,14 +36,15 @@ class RawDataFields(ctypes.Structure):
         ("ext_9",   ctypes.c_short),
         ("mag_drdy",   ctypes.c_uint8),
         ("dummy",   ctypes.c_uint8),
+        ("ts",   ctypes.c_uint32),
     ]
 
 
 def parse_raw_data_payload(raw_data):
-  fmt = "<hhhhhhhhhhhhhhhhhhhBB"
+  fmt = "<hhhhhhhhhhhhhhhhhhhBBI"
   fmt_size = struct.calcsize(fmt)
   k = RawDataFields();
-  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9, k.mag_drdy, k.dummy = struct.unpack(fmt, raw_data[:fmt_size])
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9, k.mag_drdy, k.dummy,k.ts = struct.unpack(fmt, raw_data[:fmt_size])
   return k
   
 def raw_data_renderer_function(name, in_queue):
@@ -52,14 +53,14 @@ def raw_data_renderer_function(name, in_queue):
     
     with open("imu-raw-data.csv", "w") as file:
       writer = csv.writer(file, delimiter = ',')
-      record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV']
+      record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV', 'TS']
       writer.writerow(record)
       while True:
         payload = in_queue.get()
-        if len(payload) != 40:
+        if len(payload) != 44:
           continue
         k = parse_raw_data_payload(payload)
-        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy], dtype=np.int16)
+        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.ts])
         writer.writerow(record)
 
 def socket_receiver_function(name, out_queue):
@@ -86,8 +87,8 @@ def socket_receiver_function(name, out_queue):
               elif prefix == "<CN>".encode():
                  suffix = '</CN>'.encode()
               else:
-                 print("Wrong Prefix! {}".format(prefix))
-                 data_prev = ''.encode()
+                 print("Wrong Prefix! {} start: {}, end: {}, data size: {}".format(prefix,start_pos,end_pos,len(data)))
+                 data_prev = prefix
                  break
 
               payload_start_pos = end_pos

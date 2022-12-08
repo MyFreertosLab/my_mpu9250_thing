@@ -11,6 +11,7 @@ library(plot3Drgl)
 options(rgl.printRglwidget = TRUE)
 # mvmeta for symmetric matrix vectorization (vechMat)
 library(mvmeta)
+library(data.table)
 imu.data.mag <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
   
 imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
@@ -344,14 +345,6 @@ sphere_axis=sqrt(1/coeff_spheric_acc.hat )
 scale_factors_3 = matrix(0,3,3)
 diag(scale_factors_3) <- 1/sphere_axis
 
-xr <- matrix(0, dim(prova_data)[1], 1)
-for(i in 1:dim(prova_data)[1]) {
-  xm <- as.matrix(prova_data[i,1:3])
-  xa <- as.matrix(prova_data_acc[i,1:3])
-  xr[i] <- acos((xm %*% t(xa))/(norm(xm, "2")*norm(xa, "2")))/pi*180
-}
-calibrated_data_tot <- cbind(prova_data, prova_data_acc)
-
 ############################################################################################################################
 ##### Check pitch, roll
 ############################################################################################################################
@@ -363,9 +356,9 @@ check_data_mag <- cbind(
   prova_data_acc %>% rename(CAX = AX, CAY = AY, CAZ = AZ) %>% select(CAX, CAY, CAZ)
 )
 check_data_mag_rp <- check_data_mag %>% 
-  filter(abs(AX) > 0) %>%
-  filter(abs(AY) > 0) %>%
-  filter(abs(AZ) > 0) %>%
+#  filter(abs(AX) > 0) %>%
+#  filter(abs(AY) > 0) %>%
+#  filter(abs(AZ) > 0) %>%
   mutate(NRMA = sqrt(AX^2+AY^2+AZ^2)) %>%
   mutate(CNRMA = sqrt(CAX^2+CAY^2+CAZ^2)) %>%
   mutate(NRMM = sqrt(MX^2+MY^2+MZ^2)) %>%
@@ -405,7 +398,6 @@ check_data_mag_rp <- check_data_mag %>%
 plot(check_data_mag_rp$CRA, check_data_mag_rp$DEC)
 plot(check_data_mag_rp$CPA, check_data_mag_rp$DEC)
 plot(check_data_mag_rp$CYM, check_data_mag_rp$DEC)
-
 
 ############################################################################################################################
 ##### Prove filtro after calibration
@@ -524,4 +516,60 @@ calibrated_data_filtered <- mag_apply_filter(cal_data_rpy %>% select(MX, MY, MZ,
 #mag_plot_data(calibrated_data_filtered %>% select(AX, AY, AZ), title = "acc filtered" )
 
 
- 
+############################################################################################################################
+##### Gyroscope calibration
+############################################################################################################################
+
+inertial_frame_data <- calibrated_data_filtered %>% 
+  select(MX, MY, MZ, AX, AY, AZ) %>% 
+  mutate(PITCH = -asin(AX)*f) %>%
+  mutate(ROLL = acos(AZ/cos(PITCH/f))*f) %>%
+  mutate(ROLL = case_when(AY < 0 ~ -ROLL, TRUE ~ ROLL)) %>%
+  mutate(ROLL = case_when(ROLL/f > pi ~ (ROLL/f-2*pi)*f,ROLL/f < -pi ~ (ROLL/f+2*pi)*f, TRUE ~ ROLL)) %>%
+  mutate(
+    # calculate Yaw
+    ICMX = MX * cos(PITCH/f) + MY*sin(PITCH/f)*sin(ROLL/f) + MZ * sin(PITCH/f)*cos(ROLL/f),
+    ICMY = 0                + MY*cos(ROLL/f)            - MZ*sin(ROLL/f),
+    YAW = atan2(-ICMY,ICMX)*f
+  ) %>% 
+  select(-ICMX, -ICMY) %>%
+  mutate(DROLL = ROLL - shift(ROLL, 1, fill = ROLL[1], type = "lag")) %>%
+  mutate(DPITCH = PITCH - shift(PITCH, 1, fill = PITCH[1], type = "lag")) %>%
+  mutate(DYAW = YAW - shift(YAW, 1, fill = YAW[1], type = "lag")) %>%
+  mutate(DROLL = case_when(DROLL > pi*f ~ 2*pi*f - DROLL,  DROLL < -pi*f ~  2*pi*f + DROLL, TRUE ~ DROLL)) %>%
+  mutate(DPITCH = case_when(DPITCH > pi*f ~ 2*pi*f - DPITCH,  DPITCH < -pi*f ~  2*pi*f + DPITCH, TRUE ~ DPITCH)) %>%
+  mutate(DYAW = case_when(DYAW > pi*f ~ 2*pi*f - DYAW,  DYAW < -pi*f ~  2*pi*f + DYAW, TRUE ~ DYAW)) %>%
+  select(MX, MY, MZ, AX, AY, AZ,ROLL, PITCH, YAW,DROLL, DPITCH, DYAW)
+
+plot(inertial_frame_data$ROLL, inertial_frame_data$DROLL)
+plot(inertial_frame_data$DROLL, inertial_frame_data$DPITCH)
+plot(inertial_frame_data$DROLL, inertial_frame_data$DYAW)
+plot(inertial_frame_data$DPITCH, inertial_frame_data$DYAW)
+
+corr_dy_model <- lm(DYAW ~ ., inertial_frame_data %>% select(DROLL, DPITCH, DYAW))
+summary(corr_dy_model)
+
+n = dim(imu.data.mag)[1]
+x = seq(1,n)
+plot(x, imu.data.mag$GX)
+plot(x, imu.data.mag$GY)
+plot(x, imu.data.mag$GZ)
+
+gyro_bias = c(mean(imu.data.mag$GX[1:4500]), mean(imu.data.mag$GY[1:4500]), mean(imu.data.mag$GZ[1:4500]))
+gyro_data <- imu.data.mag %>% 
+  select(GX, GY, GZ, MV) %>%
+  mutate(GX = GX - gyro_bias[1], GY = GY - gyro_bias[2], GZ = GZ - gyro_bias[3])
+grp = 0
+for( i in 1:dim(gyro_data)[1]) {
+  gyro_data$GRP[i]=grp
+  if(gyro_data$MV[i] == 1) {
+    grp = grp+1
+  }
+} 
+gyro_data_means <- gyro_data %>% 
+  group_by(GRP) %>%
+  summarise(across(c(GX,GY,GZ, MV), list(MEAN = mean, SUM = sum))) %>%
+  mutate(NUM_SMP = 1/MV_MEAN) %>%
+  filter(MV_SUM == 1) %>%
+  select(-MV_MEAN, -MV_SUM, -GRP)
+

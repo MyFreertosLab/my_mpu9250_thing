@@ -41,11 +41,13 @@ static const char *MY_MPU9250_TAG = "my_mpu9250";
 typedef struct my_raw_data_s {
 	mpu9250_raw_data_t data;
 	uint8_t mag_data_drdy;
+	uint32_t timestamp;
 } mpu9250_raw_message_t;
 
 typedef struct my_cal_data_s {
 	mpu9250_calibrated_data_t data;
 	uint8_t mag_data_drdy;
+	uint32_t timestamp;
 } mpu9250_cal_message_t;
 
 typedef struct {
@@ -210,7 +212,7 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     				// copy data to send
     				memcpy((char*)&data_message.data, data_pointer, data_size);
     				data_message.mag_data_drdy = mpu9250_handle->data.mag.drdy;
-
+    				data_message.timestamp = mpu9250_handle->data.timestamp;
     				esp_err_t res = mpu9250_send_message(sock, (char*)&data_message, buff, data_size, MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
     				if(res != ESP_OK) {
     					break;

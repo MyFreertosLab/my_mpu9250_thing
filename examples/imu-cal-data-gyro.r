@@ -12,7 +12,10 @@ options(rgl.printRglwidget = TRUE)
 # mvmeta for symmetric matrix vectorization (vechMat)
 library(mvmeta)
 library(data.table)
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro.csv')
+# from: https://search.r-project.org/CRAN/refmans/dplR/html/pass.filt.html
+library(dplR)
+
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-roll.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],]
 
 # plot original data
@@ -39,7 +42,7 @@ imu.cal.data.gyro_rp <- imu.cal.data.gyro.cnt %>%
   mutate(MX = MX/NRMM, MY = MY/NRMM, MZ = MZ/NRMM) %>%
   mutate(AX = AX/NRMA, AY = AY/NRMA, AZ = AZ/NRMA) %>%
   mutate(PA = -asin(AX)*f) %>%
-  mutate(RA = acos(min(1,max(-1, AZ/cos(PA/f))))*f) %>%
+  mutate(RA = acos(round(AZ/cos(PA/f),10))*f) %>%
   mutate(RA = case_when(AY < 0 ~ -RA, TRUE ~ RA)) %>%
   mutate(RA = case_when(RA/f > pi ~ (RA/f-2*pi)*f,RA/f < -pi ~ (RA/f+2*pi)*f, TRUE ~ RA)) %>%
   mutate(
@@ -98,9 +101,9 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
   rename(GX = GX_MEAN, GY = GY_MEAN, GZ = GZ_MEAN) %>%
   mutate(DT = (TS - shift(TS, 1, fill = TS[1], type = "lag"))/1000) %>%
   mutate(DGROLL = GX*DT,DGPITCH = GY*DT, DGYAW = GZ*DT) %>%
-  mutate(GROLL = cumsum(DGROLL) + AROLL[1]) %>%
-  mutate(GPITCH = cumsum(DGPITCH) + APITCH[1]) %>%
-  mutate(GYAW = cumsum(DGYAW) + AYAW[1]) %>%
+  mutate(GROLL = cumsum(DGROLL) + mean(AROLL[1:3000])) %>%
+  mutate(GPITCH = cumsum(DGPITCH) + mean(APITCH[1:3000])) %>%
+  mutate(GYAW = cumsum(DGYAW) + mean(AYAW[1:3000])) %>%
   mutate(
     AXG= -sin(GPITCH/f),
     AYG= sin(GROLL/f)*cos(GPITCH/f),
@@ -120,27 +123,52 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
   select(TS, MX, MY, MZ, AX, AY, AZ, AXG, AYG, AZG, GX, GY, GZ, DT, AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, DAROLL, DGROLL, DAPITCH, DGPITCH, DAYAW, DGYAW, DEC, GDEC)
   
 
-plot(imu.cal.data.gyro_rp_amg$AX, type="l", main = "AX (Black) vs GAX (Red)")
+ylim_min <- min(min(imu.cal.data.gyro_rp_amg$AXG), min(imu.cal.data.gyro_rp_amg$AX)) - 0.5
+ylim_max <- max(max(imu.cal.data.gyro_rp_amg$AXG), max(imu.cal.data.gyro_rp_amg$AX)) + 0.5
+plot(imu.cal.data.gyro_rp_amg$AX, type="l", main = "AX (Black) vs GAX (Red)", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$AXG, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AY, type="l", main = "AY (Black) vs GAY (Red)")
+ylim_min <- min(min(imu.cal.data.gyro_rp_amg$AYG), min(imu.cal.data.gyro_rp_amg$AY)) - 0.5
+ylim_max <- max(max(imu.cal.data.gyro_rp_amg$AYG), max(imu.cal.data.gyro_rp_amg$AY)) + 0.5
+plot(imu.cal.data.gyro_rp_amg$AY, type="l", main = "AY (Black) vs GAY (Red)", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$AYG, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AZ, type="l", main = "AZ (Black) vs GAZ (Red)")
+ylim_min <- min(min(imu.cal.data.gyro_rp_amg$AZG), min(imu.cal.data.gyro_rp_amg$AZ)) - 0.5
+ylim_max <- max(max(imu.cal.data.gyro_rp_amg$AZG), max(imu.cal.data.gyro_rp_amg$AZ)) + 0.5
+plot(imu.cal.data.gyro_rp_amg$AZ, type="l", main = "AZ (Black) vs GAZ (Red)", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$AZG, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red)", ylab = "Roll", ylim = c(-2,2))
+ylim_min <- min(min(imu.cal.data.gyro_rp_amg$GROLL), min(imu.cal.data.gyro_rp_amg$AROLL)) - 0.5
+ylim_max <- max(max(imu.cal.data.gyro_rp_amg$GROLL), max(imu.cal.data.gyro_rp_amg$AROLL)) + 0.5
+plot(imu.cal.data.gyro_rp_amg$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$GROLL, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red)", ylab = "Pitch")
+ylim_min <- min(min(imu.cal.data.gyro_rp_amg$GPITCH), min(imu.cal.data.gyro_rp_amg$APITCH)) - 0.5
+ylim_max <- max(max(imu.cal.data.gyro_rp_amg$GPITCH), max(imu.cal.data.gyro_rp_amg$APITCH)) + 0.5
+plot(imu.cal.data.gyro_rp_amg$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red)", ylab = "Pitch", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$GPITCH, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red)", ylab = "Yaw")
+ylim_min <- min(min(imu.cal.data.gyro_rp_amg$GYAW), min(imu.cal.data.gyro_rp_amg$AYAW)) - 0.5
+ylim_max <- max(max(imu.cal.data.gyro_rp_amg$GYAW), max(imu.cal.data.gyro_rp_amg$AYAW)) + 0.5
+plot(imu.cal.data.gyro_rp_amg$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red)", ylab = "Yaw", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$GYAW, col="red")
 
 plot(imu.cal.data.gyro_rp_amg$DEC - imu.cal.data.gyro_rp_amg$GDEC, type="l", main = "Declination Error", ylab = "ADEC - GDEC")
+plot(imu.cal.data.gyro_rp_amg$AX - imu.cal.data.gyro_rp_amg$AXG, type="l", main = "AX Error", ylab = "AX - AXG")
+plot(imu.cal.data.gyro_rp_amg$AY - imu.cal.data.gyro_rp_amg$AYG, type="l", main = "AY Error", ylab = "AY - AYG")
+plot(imu.cal.data.gyro_rp_amg$AZ - imu.cal.data.gyro_rp_amg$AZG, type="l", main = "AZ Error", ylab = "AZ - AZG")
 
+plot(imu.cal.data.gyro_rp_amg$AX - imu.cal.data.gyro_rp_amg$AXG, type="l", main = "AX Error", ylab = "AX - AXG")
 plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Roll from Accelerometer", ylab = "Roll from Gyroscope", main = "Roll: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "Yaw from Accelerometer", ylab = "Yaw from Gyroscope", main = "Yaw: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$DEC, imu.cal.data.gyro_rp_amg$GDEC, xlab = "Declination from Accelerometer", ylab = "Declination from Gyroscope", main = "Declination: Accelerometer vs Gyro")
+
+##################################################################################################
+#### Qualche relazione sui dati Accel e Gyro
+##################################################################################################
+plot(imu.cal.data.gyro_rp_amg$AX, type = "l", main = "AX (Black) vs AXG (Red) vs DGROLL (Green)")
+lines(imu.cal.data.gyro_rp_amg$AXG, col="red")
+lines(imu.cal.data.gyro_rp_amg$DGROLL, col="green")
+
+

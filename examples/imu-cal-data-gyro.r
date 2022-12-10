@@ -13,7 +13,8 @@ options(rgl.printRglwidget = TRUE)
 library(mvmeta)
 library(data.table)
 imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro.csv')
-  
+imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],]
+
 # plot original data
 scatter3D(imu.cal.data.gyro$MX, imu.cal.data.gyro$MY, imu.cal.data.gyro$MZ, colvar = imu.cal.data.gyro$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
 plotrgl()
@@ -119,19 +120,27 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
   select(TS, MX, MY, MZ, AX, AY, AZ, AXG, AYG, AZG, GX, GY, GZ, DT, AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, DAROLL, DGROLL, DAPITCH, DGPITCH, DAYAW, DGYAW, DEC, GDEC)
   
 
-plot(imu.cal.data.gyro_rp_amg$AX, type="l")
+plot(imu.cal.data.gyro_rp_amg$AX, type="l", main = "AX (Black) vs GAX (Red)")
 lines(imu.cal.data.gyro_rp_amg$AXG, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AY, type="l")
+plot(imu.cal.data.gyro_rp_amg$AY, type="l", main = "AY (Black) vs GAY (Red)")
 lines(imu.cal.data.gyro_rp_amg$AYG, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AZ, type="l")
+plot(imu.cal.data.gyro_rp_amg$AZ, type="l", main = "AZ (Black) vs GAZ (Red)")
 lines(imu.cal.data.gyro_rp_amg$AZG, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL)
-plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH)
-plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW)
+plot(imu.cal.data.gyro_rp_amg$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red)", ylab = "Roll", ylim = c(-2,2))
+lines(imu.cal.data.gyro_rp_amg$GROLL, col="red")
 
-plot(imu.cal.data.gyro_rp_amg$DEC, type="l")
-lines(imu.cal.data.gyro_rp_amg$GDEC, col="red")
+plot(imu.cal.data.gyro_rp_amg$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red)", ylab = "Pitch")
+lines(imu.cal.data.gyro_rp_amg$GPITCH, col="red")
 
+plot(imu.cal.data.gyro_rp_amg$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red)", ylab = "Yaw")
+lines(imu.cal.data.gyro_rp_amg$GYAW, col="red")
+
+plot(imu.cal.data.gyro_rp_amg$DEC - imu.cal.data.gyro_rp_amg$GDEC, type="l", main = "Declination Error", ylab = "ADEC - GDEC")
+
+plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Roll from Accelerometer", ylab = "Roll from Gyroscope", main = "Roll: Accelerometer vs Gyro")
+plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Accelerometer vs Gyro")
+plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "Yaw from Accelerometer", ylab = "Yaw from Gyroscope", main = "Yaw: Accelerometer vs Gyro")
+plot(imu.cal.data.gyro_rp_amg$DEC, imu.cal.data.gyro_rp_amg$GDEC, xlab = "Declination from Accelerometer", ylab = "Declination from Gyroscope", main = "Declination: Accelerometer vs Gyro")

@@ -463,8 +463,6 @@ cal_data_rpy <- cal_data_rpy_corr %>%
    CAZ = sin(PA/f)*cos(RA/f)*YPArx - sin(RA/f)*YPAry + cos(PA/f)*cos(RA/f)*YPArz,
   )
 
-cal_data_ang <- cal_data_rpy %>% mutate(EM = ((MX*CMX+MY*CMY+MZ*CMZ)/(sqrt(MX^2+MY^2+MZ^2)*sqrt(CMX^2+CMY^2+CMZ^2)))*f) %>% select(RA, PA, YM, EM, MDEC, CMDEC, EMDEC, MX, CMX, MY, CMY, MZ, CMZ)
-
 IMF <- matrix(c(
   cal_data_rpy_model_coeff_mrx, 
   cal_data_rpy_model_coeff_mry, 
@@ -555,10 +553,12 @@ plot(x, imu.data.mag$GX)
 plot(x, imu.data.mag$GY)
 plot(x, imu.data.mag$GZ)
 
-gyro_bias = c(mean(imu.data.mag$GX[1:4500]), mean(imu.data.mag$GY[1:4500]), mean(imu.data.mag$GZ[1:4500]))
+gyro_bias = c(mean(imu.data.mag$GX[1:10000]), mean(imu.data.mag$GY[1:10000]), mean(imu.data.mag$GZ[1:10000]))
+# gyro data are on 1000DPS => LSB = 32.768
 gyro_data <- imu.data.mag %>% 
   select(GX, GY, GZ, MV) %>%
-  mutate(GX = GX - gyro_bias[1], GY = GY - gyro_bias[2], GZ = GZ - gyro_bias[3])
+  mutate(GX = (GX - gyro_bias[1])/32.768, GY = (GY - gyro_bias[2])/32.768, GZ = (GZ - gyro_bias[3])/32.768)
+# group data before MV == 1
 grp = 0
 for( i in 1:dim(gyro_data)[1]) {
   gyro_data$GRP[i]=grp
@@ -571,5 +571,73 @@ gyro_data_means <- gyro_data %>%
   summarise(across(c(GX,GY,GZ, MV), list(MEAN = mean, SUM = sum))) %>%
   mutate(NUM_SMP = 1/MV_MEAN) %>%
   filter(MV_SUM == 1) %>%
-  select(-MV_MEAN, -MV_SUM, -GRP)
+  select(GX_MEAN, GY_MEAN, GZ_MEAN)
 
+ts_data <- imu.data.mag %>% filter(MV == 1) %>% select(TS)
+corrected_data_am <- check_data_mag_rp %>% 
+  select(CMX, CMY, CMZ, CAX, CAY, CAZ, CRA, CPA, CYM) %>% 
+  rename(MX = CMX, MY = CMY, MZ = CMZ, AX = CAX, AY = CAY, AZ = CAZ, AROLL = CRA, APITCH = CPA, AYAW = CYM) %>%
+  mutate(DAROLL = AROLL - shift(AROLL, 1, fill = AROLL[1], type = "lag")) %>%
+  mutate(DAPITCH = APITCH - shift(APITCH, 1, fill = APITCH[1], type = "lag")) %>%
+  mutate(DAYAW = AYAW - shift(AYAW, 1, fill = AYAW[1], type = "lag")) %>%
+  mutate(DAROLL = case_when(DAROLL > pi*f ~ 2*pi*f - DAROLL,  DAROLL < -pi*f ~  2*pi*f + DAROLL, TRUE ~ DAROLL)) %>%
+  mutate(DAPITCH = case_when(DAPITCH > pi*f ~ 2*pi*f - DAPITCH,  DAPITCH < -pi*f ~  2*pi*f + DAPITCH, TRUE ~ DAPITCH)) %>%
+  mutate(DAYAW = case_when(DAYAW > pi*f ~ 2*pi*f - DAYAW,  DAYAW < -pi*f ~  2*pi*f + DAYAW, TRUE ~ DAYAW))
+  
+corrected_data_amg <- cbind(ts_data, corrected_data_am, gyro_data_means) %>%
+  rename(GX = GX_MEAN, GY = GY_MEAN, GZ = GZ_MEAN) %>%
+  mutate(DT = (TS - shift(TS, 1, fill = TS[1], type = "lag"))/1000) %>%
+  mutate(DGROLL = GX*DT,DGPITCH = GY*DT, DGYAW = GZ*DT) %>%
+  mutate(
+    RDGROLL  = DGROLL*cos(APITCH/f)*cos(AYAW/f)                                           + DGPITCH*cos(APITCH/f)*sin(AYAW/f)                                           - DGYAW*sin(APITCH/f),
+    RDGPITCH = DGROLL*(sin(AROLL/f)*sin(APITCH/f)*cos(AYAW/f) - cos(AROLL/f)*sin(AYAW/f)) + DGPITCH*(sin(AROLL/f)*sin(APITCH/f)*sin(AYAW/f) + cos(AROLL/f)*cos(AYAW/f)) + DGYAW*(sin(AROLL/f)*cos(APITCH/f)),
+    RDGYAW   = DGROLL*(cos(AROLL/f)*sin(APITCH/f)*cos(AYAW/f) + sin(AROLL/f)*sin(AYAW/f)) + DGPITCH*(cos(AROLL/f)*sin(APITCH/f)*sin(AYAW/f) - sin(AROLL/f)*cos(AYAW/f)) + DGYAW*(cos(AROLL/f)*cos(APITCH/f))
+  ) %>%
+  select(TS, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ, AROLL, APITCH, AYAW, DAROLL, DGROLL, DAPITCH, DGPITCH, DAYAW, DGYAW, DT, RDGROLL, RDGPITCH, RDGYAW) %>%
+  mutate(GROLL = cumsum(DGROLL) + AROLL[1]) %>%
+  mutate(GPITCH = cumsum(DGPITCH) + APITCH[1]) %>%
+  mutate(GYAW = cumsum(DGYAW) + AYAW[1]) %>%
+  mutate(
+    AXG= -sin(GPITCH/f),
+    AYG= sin(GROLL/f)*cos(GPITCH/f),
+    AZG= cos(GROLL/f)*cos(GPITCH/f),
+  )
+
+plot(corrected_data_amg$AX, type="l")
+lines(corrected_data_amg$AXG, col="red")
+
+plot(corrected_data_amg$AY, type="l")
+lines(corrected_data_amg$AYG, col="red")
+
+plot(corrected_data_amg$AZ, type="l")
+lines(corrected_data_amg$AZG, col="red")
+
+plot(corrected_data_amg$AROLL, corrected_data_amg$GROLL)
+plot(corrected_data_amg$APITCH, corrected_data_amg$GPITCH)
+plot(corrected_data_amg$AYAW, corrected_data_amg$GYAW)
+
+
+###########################################################################################################################
+# Qualcosa non va in corrected_data_amg per GROLL/GPITCH/GYAW
+# Provo a calcolare riga per riga e confronto
+# TODO: Eliminare al termine delle prove
+###########################################################################################################################
+check_corrected_data_gyro <- imu.data.mag %>% 
+  select(GX, GY, GZ, MV, TS) %>%
+  mutate(DT = (TS - shift(TS, 1, fill = TS[1], type = "lag"))/1000) %>%
+  mutate(GX = (GX - gyro_bias[1])*DT/32.768, GY = (GY - gyro_bias[2])*DT/32.768, GZ = (GZ - gyro_bias[3])*DT/32.768) %>%
+  mutate(GROLL = cumsum(GX) + corrected_data_amg$AROLL[1]) %>%
+  mutate(GPITCH = cumsum(GY) + corrected_data_amg$APITCH[1]) %>%
+  mutate(GYAW = cumsum(GZ) + corrected_data_amg$AYAW[1]) %>%
+  filter(MV == 1)
+
+
+###########################################################################################################################
+# Dati già calibrati con unico movimento rotatorio
+###########################################################################################################################
+D <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-pitch.csv')
+
+# plot original data
+scatter3D(D$MX, D$MY, D$MZ, colvar = D$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
+plotrgl()
+rglwidget()

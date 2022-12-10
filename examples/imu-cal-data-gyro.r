@@ -135,4 +135,3 @@ plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW)
 plot(imu.cal.data.gyro_rp_amg$DEC, type="l")
 lines(imu.cal.data.gyro_rp_amg$GDEC, col="red")
 
-

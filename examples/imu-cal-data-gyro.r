@@ -13,9 +13,10 @@ options(rgl.printRglwidget = TRUE)
 library(mvmeta)
 library(data.table)
 # from: https://search.r-project.org/CRAN/refmans/dplR/html/pass.filt.html
-library(dplR)
+library(dplR) # per filtering
+library(pracma) # per cross product
 
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-roll.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],]
 
 # plot original data
@@ -122,22 +123,6 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
   mutate(GDEC = acos(IIGMX)*f) %>%
   select(TS, MX, MY, MZ, AX, AY, AZ, AXG, AYG, AZG, GX, GY, GZ, DT, AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, DAROLL, DGROLL, DAPITCH, DGPITCH, DAYAW, DGYAW, DEC, GDEC)
   
-
-ylim_min <- min(min(imu.cal.data.gyro_rp_amg$AXG), min(imu.cal.data.gyro_rp_amg$AX)) - 0.5
-ylim_max <- max(max(imu.cal.data.gyro_rp_amg$AXG), max(imu.cal.data.gyro_rp_amg$AX)) + 0.5
-plot(imu.cal.data.gyro_rp_amg$AX, type="l", main = "AX (Black) vs GAX (Red)", ylim = c(ylim_min,ylim_max))
-lines(imu.cal.data.gyro_rp_amg$AXG, col="red")
-
-ylim_min <- min(min(imu.cal.data.gyro_rp_amg$AYG), min(imu.cal.data.gyro_rp_amg$AY)) - 0.5
-ylim_max <- max(max(imu.cal.data.gyro_rp_amg$AYG), max(imu.cal.data.gyro_rp_amg$AY)) + 0.5
-plot(imu.cal.data.gyro_rp_amg$AY, type="l", main = "AY (Black) vs GAY (Red)", ylim = c(ylim_min,ylim_max))
-lines(imu.cal.data.gyro_rp_amg$AYG, col="red")
-
-ylim_min <- min(min(imu.cal.data.gyro_rp_amg$AZG), min(imu.cal.data.gyro_rp_amg$AZ)) - 0.5
-ylim_max <- max(max(imu.cal.data.gyro_rp_amg$AZG), max(imu.cal.data.gyro_rp_amg$AZ)) + 0.5
-plot(imu.cal.data.gyro_rp_amg$AZ, type="l", main = "AZ (Black) vs GAZ (Red)", ylim = c(ylim_min,ylim_max))
-lines(imu.cal.data.gyro_rp_amg$AZG, col="red")
-
 ylim_min <- min(min(imu.cal.data.gyro_rp_amg$GROLL), min(imu.cal.data.gyro_rp_amg$AROLL)) - 0.5
 ylim_max <- max(max(imu.cal.data.gyro_rp_amg$GROLL), max(imu.cal.data.gyro_rp_amg$AROLL)) + 0.5
 plot(imu.cal.data.gyro_rp_amg$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
@@ -153,6 +138,24 @@ ylim_max <- max(max(imu.cal.data.gyro_rp_amg$GYAW), max(imu.cal.data.gyro_rp_amg
 plot(imu.cal.data.gyro_rp_amg$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red)", ylab = "Yaw", ylim = c(ylim_min,ylim_max))
 lines(imu.cal.data.gyro_rp_amg$GYAW, col="red")
 
+ylim_min <- min(imu.cal.data.gyro_rp_amg$MX, imu.cal.data.gyro_rp_amg$AX, imu.cal.data.gyro_rp_amg$AXG) - 0.5
+ylim_max <- max(imu.cal.data.gyro_rp_amg$MX, imu.cal.data.gyro_rp_amg$AX, imu.cal.data.gyro_rp_amg$AXG) + 0.5
+plot(imu.cal.data.gyro_rp_amg$MX, type="l", main = "MX (Black) vs AX (Red) vs AXG (Blue)", ylab = "MX,AX,AXG", ylim = c(ylim_min,ylim_max))
+lines(imu.cal.data.gyro_rp_amg$AX, col="red")
+lines(imu.cal.data.gyro_rp_amg$AXG, col="blue")
+
+ylim_min <- min(imu.cal.data.gyro_rp_amg$MY, imu.cal.data.gyro_rp_amg$AY, imu.cal.data.gyro_rp_amg$AYG) - 0.5
+ylim_max <- max(imu.cal.data.gyro_rp_amg$MY, imu.cal.data.gyro_rp_amg$AY, imu.cal.data.gyro_rp_amg$AYG) + 0.5
+plot(imu.cal.data.gyro_rp_amg$MY, type="l", main = "MY (Black) vs AY (Red) vs AYG (Blue)", ylab = "MY,AY,AYG", ylim = c(ylim_min,ylim_max))
+lines(imu.cal.data.gyro_rp_amg$AY, col="red")
+lines(imu.cal.data.gyro_rp_amg$AYG, col="blue")
+
+ylim_min <- min(imu.cal.data.gyro_rp_amg$MZ, imu.cal.data.gyro_rp_amg$AZ, imu.cal.data.gyro_rp_amg$AZG) - 0.5
+ylim_max <- max(imu.cal.data.gyro_rp_amg$MZ, imu.cal.data.gyro_rp_amg$AZ, imu.cal.data.gyro_rp_amg$AZG) + 0.5
+plot(imu.cal.data.gyro_rp_amg$MZ, type="l", main = "MZ (Black) vs -AZ (Red) vs -AZG (Blue)", ylab = "MZ,-AZ,-AZG", ylim = c(ylim_min,ylim_max))
+lines(-imu.cal.data.gyro_rp_amg$AZ, col="red")
+lines(-imu.cal.data.gyro_rp_amg$AZG, col="blue")
+
 plot(imu.cal.data.gyro_rp_amg$DEC - imu.cal.data.gyro_rp_amg$GDEC, type="l", main = "Declination Error", ylab = "ADEC - GDEC")
 plot(imu.cal.data.gyro_rp_amg$AX - imu.cal.data.gyro_rp_amg$AXG, type="l", main = "AX Error", ylab = "AX - AXG")
 plot(imu.cal.data.gyro_rp_amg$AY - imu.cal.data.gyro_rp_amg$AYG, type="l", main = "AY Error", ylab = "AY - AYG")
@@ -163,12 +166,15 @@ plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Rol
 plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "Yaw from Accelerometer", ylab = "Yaw from Gyroscope", main = "Yaw: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$DEC, imu.cal.data.gyro_rp_amg$GDEC, xlab = "Declination from Accelerometer", ylab = "Declination from Gyroscope", main = "Declination: Accelerometer vs Gyro")
+plot(imu.cal.data.gyro_rp_amg$DEC, main = "Declination from Accelerometer", type = "l")
 
 ##################################################################################################
 #### Qualche relazione sui dati Accel e Gyro
 ##################################################################################################
-plot(imu.cal.data.gyro_rp_amg$AX, type = "l", main = "AX (Black) vs AXG (Red) vs DGROLL (Green)")
-lines(imu.cal.data.gyro_rp_amg$AXG, col="red")
-lines(imu.cal.data.gyro_rp_amg$DGROLL, col="green")
+# TODO: Calcolare Roll,Pitch,Yaw da magnetometro
+# Provare a sfruttare la declinazione teorica (58.21deg) come reference
 
-
+# In assenza di accelerazioni, u è l'asse di rotazione
+u <- pracma::cross(c(imu.cal.data.gyro_rp_amg$AX[5001], imu.cal.data.gyro_rp_amg$AY[5001], imu.cal.data.gyro_rp_amg$AZ[5001]),c(imu.cal.data.gyro_rp_amg$MX[5001], imu.cal.data.gyro_rp_amg$MY[5001], imu.cal.data.gyro_rp_amg$MZ[5001]))
+u <- u/norm(u, "2")
+u

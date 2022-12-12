@@ -191,7 +191,8 @@ imu.cal.data.gyro_rp_amg_model_coeff_mrx <- imu.cal.data.gyro_rp_amg_model_fit_m
 P <- imu.cal.data.gyro_rp_amg %>% select(GROLL, AROLL) %>% mutate(RAROLL = imu.cal.data.gyro_rp_amg_model_coeff_mrx[1]+GROLL*imu.cal.data.gyro_rp_amg_model_coeff_mrx[2], PITCH_ERR = AROLL - RAROLL)
 
 plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Roll from Accelerometer", ylab = "Roll from Gyroscope", main = "Roll: Linear Regression Accelerometer vs Gyro", ylim = c(-60,80))
-lines(P$AROLL,P$RAROLL, col="red")
+##lines(P$AROLL,P$RAROLL, col="red")
+lines(seq(-100,100),imu.cal.data.gyro_rp_amg_model_coeff_mrx[1] + seq(-100,100)*imu.cal.data.gyro_rp_amg_model_coeff_mrx[2], col="red")
 
 ylim_min <- min(P$GROLL, P$AROLL, P$RAROLL) - 0.5
 ylim_max <- max(P$GROLL, P$AROLL, P$RAROLL) + 0.5
@@ -278,3 +279,4 @@ mr - mr_recalculated
 # OK! this can work.
 mr_recalculated_1 <- eucMatrix(0,-31.79/180*pi,0) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% t(eucMatrix(0,-31.79/180*pi,0)) %*% toInertialFrameMatrix %*% mrr_ril
 mr - mr_recalculated_1
+

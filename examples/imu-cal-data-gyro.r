@@ -16,7 +16,7 @@ library(data.table)
 library(dplR) # per filtering
 library(pracma) # per cross product
 
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-roll.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],]
 
 # plot original data
@@ -163,13 +163,55 @@ plot(imu.cal.data.gyro_rp_amg$AZ - imu.cal.data.gyro_rp_amg$AZG, type="l", main 
 
 plot(imu.cal.data.gyro_rp_amg$AX - imu.cal.data.gyro_rp_amg$AXG, type="l", main = "AX Error", ylab = "AX - AXG")
 plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Roll from Accelerometer", ylab = "Roll from Gyroscope", main = "Roll: Accelerometer vs Gyro")
-plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Accelerometer vs Gyro")
+plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Accelerometer vs Gyro", ylim = c(-60,80))
 plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "Yaw from Accelerometer", ylab = "Yaw from Gyroscope", main = "Yaw: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$DEC, imu.cal.data.gyro_rp_amg$GDEC, xlab = "Declination from Accelerometer", ylab = "Declination from Gyroscope", main = "Declination: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$DEC, main = "Declination from Accelerometer", type = "l")
 
 ##################################################################################################
-#### Qualche relazione sui dati Accel e Gyro
+#### Linear Regression: Pitch Accelerometer from Gyroscope
+##################################################################################################
+imu.cal.data.gyro_rp_amg_model_fit_mrx <- lm(APITCH ~ ., imu.cal.data.gyro_rp_amg %>% select(GPITCH, APITCH))
+imu.cal.data.gyro_rp_amg_model_coeff_mrx <- imu.cal.data.gyro_rp_amg_model_fit_mrx$coefficients
+P <- imu.cal.data.gyro_rp_amg %>% select(GPITCH, APITCH) %>% mutate(RAPITCH = imu.cal.data.gyro_rp_amg_model_coeff_mrx[1]+GPITCH*imu.cal.data.gyro_rp_amg_model_coeff_mrx[2], PITCH_ERR = APITCH - RAPITCH)
+
+plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Linear Regression Accelerometer vs Gyro", ylim = c(-60,80))
+lines(P$APITCH,P$RAPITCH, col="red")
+
+ylim_min <- min(P$GPITCH, P$APITCH, P$RAPITCH) - 0.5
+ylim_max <- max(P$GPITCH, P$APITCH, P$RAPITCH) + 0.5
+plot(P$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red) vs RAPITCH (Blue)", ylab = "Pitch", ylim = c(ylim_min,ylim_max))
+lines(P$GPITCH, col="red")
+lines(P$RAPITCH, col="blue")
+
+imu.cal.data.gyro_rp_amg_model_fit_mrx <- lm(AROLL ~ ., imu.cal.data.gyro_rp_amg %>% select(GROLL, AROLL))
+imu.cal.data.gyro_rp_amg_model_coeff_mrx <- imu.cal.data.gyro_rp_amg_model_fit_mrx$coefficients
+P <- imu.cal.data.gyro_rp_amg %>% select(GROLL, AROLL) %>% mutate(RAROLL = imu.cal.data.gyro_rp_amg_model_coeff_mrx[1]+GROLL*imu.cal.data.gyro_rp_amg_model_coeff_mrx[2], PITCH_ERR = AROLL - RAROLL)
+
+plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Roll from Accelerometer", ylab = "Roll from Gyroscope", main = "Roll: Linear Regression Accelerometer vs Gyro", ylim = c(-60,80))
+lines(P$AROLL,P$RAROLL, col="red")
+
+ylim_min <- min(P$GROLL, P$AROLL, P$RAROLL) - 0.5
+ylim_max <- max(P$GROLL, P$AROLL, P$RAROLL) + 0.5
+plot(P$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red) vs RAROLL (Blue)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
+lines(P$GROLL, col="red")
+lines(P$RAROLL, col="blue")
+
+imu.cal.data.gyro_rp_amg_model_fit_mrx <- lm(AYAW ~ ., imu.cal.data.gyro_rp_amg %>% select(GYAW, AYAW))
+imu.cal.data.gyro_rp_amg_model_coeff_mrx <- imu.cal.data.gyro_rp_amg_model_fit_mrx$coefficients
+P <- imu.cal.data.gyro_rp_amg %>% select(GYAW, AYAW) %>% mutate(RAYAW = imu.cal.data.gyro_rp_amg_model_coeff_mrx[1]+GYAW*imu.cal.data.gyro_rp_amg_model_coeff_mrx[2], PITCH_ERR = AYAW - RAYAW)
+
+plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "YAW from Accelerometer", ylab = "YAW from Gyroscope", main = "YAW: Linear Regression Accelerometer vs Gyro", ylim = c(-60,80))
+lines(P$AYAW,P$RAYAW, col="red")
+
+ylim_min <- min(P$GYAW, P$AYAW, P$RAYAW) - 0.5
+ylim_max <- max(P$GYAW, P$AYAW, P$RAYAW) + 0.5
+plot(P$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red) vs RAYAW (Blue)", ylab = "YAW", ylim = c(ylim_min,ylim_max))
+lines(P$GYAW, col="red")
+lines(P$RAYAW, col="blue")
+
+##################################################################################################
+#### Qualche relazione sui dati Mag, Accel, Gyro
 ##################################################################################################
 # TODO: Calcolare Roll,Pitch,Yaw da magnetometro
 # Provare a sfruttare la declinazione teorica (58.21deg) come reference
@@ -178,3 +220,44 @@ plot(imu.cal.data.gyro_rp_amg$DEC, main = "Declination from Accelerometer", type
 u <- pracma::cross(c(imu.cal.data.gyro_rp_amg$AX[5001], imu.cal.data.gyro_rp_amg$AY[5001], imu.cal.data.gyro_rp_amg$AZ[5001]),c(imu.cal.data.gyro_rp_amg$MX[5001], imu.cal.data.gyro_rp_amg$MY[5001], imu.cal.data.gyro_rp_amg$MZ[5001]))
 u <- u/norm(u, "2")
 u
+
+eucMatrix <- function(roll, pitch, yaw) {
+  RES <- matrix(c(
+           cos(yaw)*cos(pitch), cos(yaw)*sin(pitch)*sin(roll)-sin(yaw)*cos(roll), cos(yaw)*sin(pitch)*cos(roll)+sin(yaw)*sin(roll),
+           sin(yaw)*cos(pitch), sin(yaw)*sin(pitch)*sin(roll)+cos(yaw)*cos(roll), sin(yaw)*sin(pitch)*cos(roll)-cos(yaw)*sin(roll),
+           -sin(pitch), cos(pitch)*sin(roll), cos(pitch)*cos(roll)
+           ), nrow=3, ncol=3, byrow = TRUE)
+  return(RES)
+}
+crossMatrix <- function(u) {
+  RES <- matrix(c(
+    0, -u[3], u[2],
+    u[3], 0, -u[1],
+    -u[2], u[1], 0
+  ), nrow=3, ncol=3, byrow=TRUE)
+  return(RES)
+}
+rotMatrix <- function(teta, u) {
+  I <- diag(1,3,3)
+  RES <- I*cos(teta) + sin(teta)*crossMatrix(u) + (1-cos(teta))*u%*%t(u)
+  return(RES)
+}
+
+# to inertial frame matrix 
+# reference mag in body frame (mrr)
+toInertialFrameMatrix <- eucMatrix(pi/2,pi/4,pi/6)
+mr <- eucMatrix(0,-31.79/180*pi,0) %*% matrix(c(0,0,-1)) # Coordinate reference in inertial frame
+mrr <- t(toInertialFrameMatrix) %*% mr # rilevazione corretta in body frame
+
+# measurement from mag (force a pitch error from declination)
+mr1 <- eucMatrix(0,-37.15/180*pi,0) %*% matrix(c(0,0,-1)) # Coordinate rilevazione in inertial frame
+mrr_ril <- t(toInertialFrameMatrix) %*% mr1 # rilevazione con pitch errato in body frame
+
+dec_err = acos(t(mrr) %*% mrr_ril)*f 
+
+mr_ref <- t(eucMatrix(0,-31.79/180*pi,0)) %*% toInertialFrameMatrix %*% mrr_ril
+mr_err <- matrix(c(0,0,-1)) - mr_ref
+ipitch <- -asin(mr_ref[1])
+iroll <- acos(round(-mr_ref[3]/cos(ipitch), 5))
+irpy_err <- as.matrix(c(iroll, ipitch, 0))
+eucMatrix(0,-31.79/180*pi,0) %*% irpy_err*f

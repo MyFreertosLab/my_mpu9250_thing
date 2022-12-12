@@ -15,6 +15,8 @@ library(data.table)
 # from: https://search.r-project.org/CRAN/refmans/dplR/html/pass.filt.html
 library(dplR) # per filtering
 library(pracma) # per cross product
+# from: https://search.r-project.org/CRAN/refmans/matlib/html/vectors3d.html
+library(matlib)
 
 imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-roll.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],]
@@ -245,19 +247,34 @@ rotMatrix <- function(teta, u) {
 
 # to inertial frame matrix 
 # reference mag in body frame (mrr)
-toInertialFrameMatrix <- eucMatrix(pi/2,pi/4,pi/6)
+toInertialFrameMatrix <- eucMatrix(pi/3,pi/6,pi/8)
+toInertialFrameMatrixWithError <- eucMatrix(pi/3-18.5/180*pi,pi/6-14.5/180*pi,pi/8-12.1/10*pi)
 mr <- eucMatrix(0,-31.79/180*pi,0) %*% matrix(c(0,0,-1)) # Coordinate reference in inertial frame
 mrr <- t(toInertialFrameMatrix) %*% mr # rilevazione corretta in body frame
 
-# measurement from mag (force a pitch error from declination)
-mr1 <- eucMatrix(0,-37.15/180*pi,0) %*% matrix(c(0,0,-1)) # Coordinate rilevazione in inertial frame
-mrr_ril <- t(toInertialFrameMatrix) %*% mr1 # rilevazione con pitch errato in body frame
+# measurement from mag in body frame (force a roll,pitch,yaw error)
+mrr_ril <- t(toInertialFrameMatrixWithError) %*% mr # ok, mrr is real, mrr_ril is sensor received
 
-dec_err = acos(t(mrr) %*% mrr_ril)*f 
-
+# Mag cordinates in a frame in line with magnetic field
 mr_ref <- t(eucMatrix(0,-31.79/180*pi,0)) %*% toInertialFrameMatrix %*% mrr_ril
-mr_err <- matrix(c(0,0,-1)) - mr_ref
-ipitch <- -asin(mr_ref[1])
+# roll,pitch,yaw must be zero
+ipitch <- asin(mr_ref[1])
 iroll <- acos(round(-mr_ref[3]/cos(ipitch), 5))
-irpy_err <- as.matrix(c(iroll, ipitch, 0))
-eucMatrix(0,-31.79/180*pi,0) %*% irpy_err*f
+iyaw <- atan2(mr_ref[2], mr_ref[1])
+irpy_err <- as.matrix(c(iroll, ipitch, iyaw))
+
+# TODO: verificare
+# It can works? rotate error to body frame
+brpy_err <- t(toInertialFrameMatrix) %*% eucMatrix(0,-31.79/180*pi,0) %*% irpy_err
+
+# Modo 1: correzione in body frame
+# FIXME: Verificare
+mrr_ril_corrected <- eucMatrix(brpy_err[1], brpy_err[2], brpy_err[3]) %*% mrr_ril
+mr_recalculated <- toInertialFrameMatrix %*% mrr_ril_corrected
+mr - mr_recalculated
+
+# Modo 2: correzione in inertial frame
+# FIXME: I inverted the sign of pitch and yaw to resolve
+# OK! this can work.
+mr_recalculated_1 <- eucMatrix(0,-31.79/180*pi,0) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% t(eucMatrix(0,-31.79/180*pi,0)) %*% toInertialFrameMatrix %*% mrr_ril
+mr - mr_recalculated_1

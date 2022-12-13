@@ -264,16 +264,6 @@ iroll <- acos(round(-mr_ref[3]/cos(ipitch), 5))
 iyaw <- atan2(mr_ref[2], mr_ref[1])
 irpy_err <- as.matrix(c(iroll, ipitch, iyaw))
 
-# TODO: verificare
-# It can works? rotate error to body frame
-brpy_err <- t(toInertialFrameMatrix) %*% eucMatrix(0,-31.79/180*pi,0) %*% irpy_err
-
-# Modo 1: correzione in body frame
-# FIXME: Verificare
-mrr_ril_corrected <- eucMatrix(brpy_err[1], brpy_err[2], brpy_err[3]) %*% mrr_ril
-mr_recalculated <- toInertialFrameMatrix %*% mrr_ril_corrected
-mr - mr_recalculated
-
 # Modo 2: correzione in inertial frame
 # FIXME: I inverted the sign of pitch and yaw to resolve
 # OK! this can work.

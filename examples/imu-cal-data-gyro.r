@@ -166,7 +166,7 @@ plot(imu.cal.data.gyro_rp_amg$AZ - imu.cal.data.gyro_rp_amg$AZG, type="l", main 
 plot(imu.cal.data.gyro_rp_amg$AX - imu.cal.data.gyro_rp_amg$AXG, type="l", main = "AX Error", ylab = "AX - AXG")
 plot(imu.cal.data.gyro_rp_amg$AROLL, imu.cal.data.gyro_rp_amg$GROLL, xlab = "Roll from Accelerometer", ylab = "Roll from Gyroscope", main = "Roll: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$APITCH, imu.cal.data.gyro_rp_amg$GPITCH, xlab = "Pitch from Accelerometer", ylab = "Pitch from Gyroscope", main = "Pitch: Accelerometer vs Gyro", ylim = c(-60,80))
-plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "Yaw from Accelerometer", ylab = "Yaw from Gyroscope", main = "Yaw: Accelerometer vs Gyro")
+plot(imu.cal.data.gyro_rp_amg$AYAW, imu.cal.data.gyro_rp_amg$GYAW, xlab = "Yaw from Magnetometer", ylab = "Yaw from Gyroscope", main = "Yaw: Magnetometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$DEC, imu.cal.data.gyro_rp_amg$GDEC, xlab = "Declination from Accelerometer", ylab = "Declination from Gyroscope", main = "Declination: Accelerometer vs Gyro")
 plot(imu.cal.data.gyro_rp_amg$DEC, main = "Declination from Accelerometer", type = "l")
 
@@ -224,6 +224,8 @@ u <- pracma::cross(c(imu.cal.data.gyro_rp_amg$AX[5001], imu.cal.data.gyro_rp_amg
 u <- u/norm(u, "2")
 u
 
+toRad <- pi/180
+toDeg <- 1/toRad
 eucMatrix <- function(roll, pitch, yaw) {
   RES <- matrix(c(
            cos(yaw)*cos(pitch), cos(yaw)*sin(pitch)*sin(roll)-sin(yaw)*cos(roll), cos(yaw)*sin(pitch)*cos(roll)+sin(yaw)*sin(roll),
@@ -245,28 +247,87 @@ rotMatrix <- function(teta, u) {
   RES <- I*cos(teta) + sin(teta)*crossMatrix(u) + (1-cos(teta))*u%*%t(u)
   return(RES)
 }
-
-# to inertial frame matrix 
+toIFMatrix <- function(rpy) {
+  return(eucMatrix(rpy[1],rpy[2],rpy[3]))
+}
+toIF <- function(rpy, v) {
+  return(toIFMatrix(rpy) %*% v)
+}
+toBFMatrix <- function(rpy) {
+  return(t(toIFMatrix(rpy)))
+}
+toBF <- function(rpy, v) {
+  return(toBFMatrix(rpy) %*% v)
+}
+fromMFFToIFMatrix <- function(declination) {
+  return(eucMatrix(0,pi+declination,0))
+}
+fromIFToMFFMatrix <- function(declination) {
+  return(t(fromMFFToIFMatrix(declination)))  
+}
+fromIFToMFF <- function(declination, v) {
+  return(fromIFToMFFMatrix(declination) %*% v)
+}
+fromMFFToIF <- function(declination, v) {
+  return(fromMFFToIFMatrix(declination) %*% v)
+}
+makeDecRefInIF <- function(declination) {
+  return(fromMFFToIF(declination, matrix(c(0,0,1))))
+}
+# RPY reference is vector c(0,0,1) = -g
+calcRPY <- function(v) {
+  ipitch <- -asin(v[1])
+  iroll <- acos(round(v[3]/cos(ipitch), 5))
+  if(v[2] < 0) {
+    iroll = -iroll
+  }
+  if(iroll > pi) {
+    iroll = iroll - 2*pi
+  } else if(iroll < -pi) {
+    iroll = iroll + 2*pi
+  }
+  iyaw <- -atan2(v[2], v[1])
+  result <- as.matrix(c(iroll, ipitch, iyaw))
+  return(result)
+}
 # reference mag in body frame (mrr)
-toInertialFrameMatrix <- eucMatrix(pi/3,pi/6,pi/8)
-toInertialFrameMatrixWithError <- eucMatrix(pi/3-18.5/180*pi,pi/6-14.5/180*pi,pi/8-12.1/10*pi)
-mr <- eucMatrix(0,-31.79/180*pi,0) %*% matrix(c(0,0,-1)) # Coordinate reference in inertial frame
-mrr <- t(toInertialFrameMatrix) %*% mr # rilevazione corretta in body frame
+declination = 58.21*toRad
+rpy <- c(pi/3,pi/6,pi/8)
+# Declination coordinate reference in inertial frame
+mr <- makeDecRefInIF(declination) 
+# expected meausure
+mrr <- toBF(rpy, mr) 
 
-# measurement from mag in body frame (force a roll,pitch,yaw error)
-mrr_ril <- t(toInertialFrameMatrixWithError) %*% mr # ok, mrr is real, mrr_ril is sensor received
+# measurement from mag in body frame (force some roll,pitch,yaw error)
+rpy_ril = rpy + c(-18.5*toRad,-14.5*toRad,-12.1*toRad)
+# measurement from mag in inertial frame
+mrr_ril <- toIF(rpy_ril,mr)
 
-# Mag cordinates in a frame in line with magnetic field
-mr_ref <- t(eucMatrix(0,-31.79/180*pi,0)) %*% toInertialFrameMatrix %*% mrr_ril
-# roll,pitch,yaw must be zero
-ipitch <- asin(mr_ref[1])
-iroll <- acos(round(-mr_ref[3]/cos(ipitch), 5))
-iyaw <- atan2(mr_ref[2], mr_ref[1])
-irpy_err <- as.matrix(c(iroll, ipitch, iyaw))
+# 
+mr_ref <- fromIFToMFF(declination, toIF(rpy, mrr_ril))
+irpy_err <- calcRPY(mr_ref)
 
-# Modo 2: correzione in inertial frame
-# FIXME: I inverted the sign of pitch and yaw to resolve
+# Correzione in inertial frame
 # OK! this can work.
-mr_recalculated_1 <- eucMatrix(0,-31.79/180*pi,0) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% t(eucMatrix(0,-31.79/180*pi,0)) %*% toInertialFrameMatrix %*% mrr_ril
-mr - mr_recalculated_1
+mr_recalculated_1 <- fromMFFToIF(declination, eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFF(declination, toIF(rpy, mrr_ril)))
+print("Error from reference")
+mr - toIF(rpy, mrr_ril)
+print("Error from reference after correction")
+mrr - toBF(rpy, mr_recalculated_1)
 
+print("RPY before correction")
+rpy*f
+print("RPY after correction")
+calcRPY(mr_recalculated_1)*f
+calcRPY(mr)*f
+
+# New Matrix è la nuova matrice to (Body Frame -> Inertial Frame)
+newMatrix <- fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFFMatrix(declination) %*% toIFMatrix(rpy)
+t(newMatrix) %*% mr
+mrr_ril
+
+newPitch <- -asin(newMatrix[3,1])*f
+newRoll <- acos(newMatrix[3,3]/cos(newPitch/f))*f
+newYaw <- -atan2(newMatrix[3,2],newMatrix[3,1])*f
+print(c("Old RPY: ", rpy[1]*f, rpy[2]*f, rpy[3]*f))
+print(c("New RPY: ", newRoll, newPitch, newYaw))

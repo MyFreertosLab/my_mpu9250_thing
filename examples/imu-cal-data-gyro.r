@@ -260,7 +260,7 @@ toBF <- function(rpy, v) {
   return(toBFMatrix(rpy) %*% v)
 }
 fromMFFToIFMatrix <- function(declination) {
-  return(eucMatrix(0,pi+declination,0))
+  return(eucMatrix(0,(pi/2+declination),0))
 }
 fromIFToMFFMatrix <- function(declination) {
   return(t(fromMFFToIFMatrix(declination)))  
@@ -292,16 +292,16 @@ calcRPY <- function(v) {
 }
 # reference mag in body frame (mrr)
 declination = 58.21*toRad
-rpy <- c(pi/3,pi/6,pi/8)
+rpy <- c(0,-10*toRad,0)
 # Declination coordinate reference in inertial frame
 mr <- makeDecRefInIF(declination) 
 # expected meausure
 mrr <- toBF(rpy, mr) 
 
 # measurement from mag in body frame (force some roll,pitch,yaw error)
-rpy_ril = rpy + c(-18.5*toRad,-14.5*toRad,-12.1*toRad)
-# measurement from mag in inertial frame
-mrr_ril <- toIF(rpy_ril,mr)
+rpy_ril = rpy + c(0*toRad,-3*toRad,0*toRad)
+# measurement from mag in body frame
+mrr_ril <- toBF(rpy_ril,mr)
 
 # 
 mr_ref <- fromIFToMFF(declination, toIF(rpy, mrr_ril))
@@ -321,13 +321,11 @@ print("RPY after correction")
 calcRPY(mr_recalculated_1)*f
 calcRPY(mr)*f
 
-# New Matrix è la nuova matrice to (Body Frame -> Inertial Frame)
-newMatrix <- fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFFMatrix(declination) %*% toIFMatrix(rpy)
-t(newMatrix) %*% mr
-mrr_ril
+mrr_ril_corrected <- toBF(rpy,fromMFFToIF(declination, t(eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3])) %*% fromIFToMFF(declination, mr)))
+newRpy <- calcRPY(mrr_ril_corrected)
+mrrRpy <- calcRPY(mrr)
+mrRpy <- calcRPY(mr)
 
-newPitch <- -asin(newMatrix[3,1])*f
-newRoll <- acos(newMatrix[3,3]/cos(newPitch/f))*f
-newYaw <- -atan2(newMatrix[3,2],newMatrix[3,1])*f
-print(c("Old RPY: ", rpy[1]*f, rpy[2]*f, rpy[3]*f))
-print(c("New RPY: ", newRoll, newPitch, newYaw))
+print(c("Old RPY: ", mrrRpy[1]*toDeg, mrrRpy[2]*toDeg, mrrRpy[3]*toDeg))
+print(c("New RPY: ", newRpy[1]*toDeg, newRpy[2]*toDeg, newRpy[3]*toDeg))
+

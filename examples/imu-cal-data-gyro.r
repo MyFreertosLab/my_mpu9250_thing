@@ -272,7 +272,7 @@ fromMFFToIF <- function(declination, v) {
   return(fromMFFToIFMatrix(declination) %*% v)
 }
 makeDecRefInIF <- function(declination) {
-  return(fromMFFToIF(declination, matrix(c(0,0,1))))
+  return(round(fromMFFToIF(declination, matrix(c(0,0,1))),10))
 }
 # RPY reference is vector c(0,0,1) = -g
 calcRPY <- function(v) {
@@ -290,42 +290,87 @@ calcRPY <- function(v) {
   result <- as.matrix(c(iroll, ipitch, iyaw))
   return(result)
 }
-# reference mag in body frame (mrr)
-declination = 58.21*toRad
-rpy <- c(0,-10*toRad,0)
-# Declination coordinate reference in inertial frame
-mr <- makeDecRefInIF(declination) 
-# expected meausure
-mrr <- toBF(rpy, mr) 
 
-# measurement from mag in body frame (force some roll,pitch,yaw error)
-rpy_ril = rpy + c(0*toRad,-3*toRad,0*toRad)
-# measurement from mag in body frame
-mrr_ril <- toBF(rpy_ril,mr)
+toBFTest <- function(rpy, v, v_expected) {
+  v_actual <- toBF(rpy, v)
+  stopifnot(round(v_actual,7) == round(v_expected,7))
+  return(TRUE)
+}
+toIFTest <- function(rpy, v, v_expected) {
+  v_actual <- toIF(rpy, v)
+  stopifnot(round(v_actual,7) == round(v_expected,7))
+  return(TRUE)
+}
+
+toBFTest(as.matrix(c(0,0,90*toRad)), as.matrix(c(1,0,0)),as.matrix(c(0,-1,0)))
+toIFTest(as.matrix(c(0,0,90*toRad)),as.matrix(c(0,-1,0)), as.matrix(c(1,0,0)))
+toBFTest(as.matrix(c(0,90*toRad,0)), as.matrix(c(1,0,0)),as.matrix(c(0,0,1)))
+toIFTest(as.matrix(c(0,90*toRad,0)),as.matrix(c(0,0,1)), as.matrix(c(1,0,0)))
+toBFTest(as.matrix(c(0,90*toRad,90*toRad)), as.matrix(c(1,0,0)),as.matrix(c(0,-1,0)))
+toIFTest(as.matrix(c(0,90*toRad,90*toRad)),as.matrix(c(0,-1,0)), as.matrix(c(1,0,0)))
+toBFTest(as.matrix(c(90*toRad,0,0*toRad)), as.matrix(c(0,0,1)),as.matrix(c(0,1,0)))
+toBFTest(as.matrix(c(10*toRad,0,0*toRad)), as.matrix(c(0,0,1)),as.matrix(c(0,0.1736482,0.9848078)))
 
 # 
-mr_ref <- fromIFToMFF(declination, toIF(rpy, mrr_ril))
+# With Inertial Frame Axis:
+#  X oriented to North
+#  Y oriented to West
+#  Z oriented to Zenith
+# this is the angle between vectors of magnetic field mr <- c(x,0,z) and X axis versor c(1,0,0)
+declination = 58.21*toRad
+
+# estimation of roll, pitch from accel and yaw from mag in body frame
+rpy <- c(0*toRad,10*toRad,0*toRad)
+
+# Declination coordinate reference in inertial frame
+mr <- makeDecRefInIF(declination) 
+
+# expected meausure from Mag in body frame
+mrr <- toBF(rpy, mr) 
+
+# real rpy (I force some roll,pitch,yaw difference)
+rpy_real = rpy + c(0*toRad,6*toRad,0*toRad)
+
+# real measures in body frame
+mrr_real <- toBF(rpy_real,mr)
+
+# Roll, Pitch, Yaw Error Calculation for Mag
+iyaw_err <- calcRPY(toIF(rpy, mrr_real))[3]
+mr_ref <- fromIFToMFF(declination, eucMatrix(0, 0, iyaw_err) %*% toIF(rpy, mrr_real))
 irpy_err <- calcRPY(mr_ref)
+irpy_err[3] <- 0
+
+# from mag reference in Inertial Frame to mag reference in Body Frame with error correction
+# must be equal to mrr_real (real mag reference)
+IFCorrectionMatrix <- fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFFMatrix(declination) %*% eucMatrix(0, 0, iyaw_err)
+IF_NEW_RPY_MATRIX <- IFCorrectionMatrix %*% toIFMatrix(rpy)
 
 # Correzione in inertial frame
 # OK! this can work.
-mr_recalculated_1 <- fromMFFToIF(declination, eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFF(declination, toIF(rpy, mrr_ril)))
-print("Error from reference")
-mr - toIF(rpy, mrr_ril)
-print("Error from reference after correction")
-mrr - toBF(rpy, mr_recalculated_1)
+#mr_recalculated_1 <- round(fromMFFToIF(declination, eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFF(declination, eucMatrix(0, 0, iyaw_err) %*% toIF(rpy, mrr_real))),10)
+mr_recalculated_1 <- IF_NEW_RPY_MATRIX %*% mrr_real
+print("Error from mag reference in Inertial Frame before correction")
+round(mr - toIF(rpy, mrr_real),10)
+print("Error from mag reference in Inertial Frame after correction")
+round(mrr - toBF(rpy, mr_recalculated_1), 10)
 
-print("RPY before correction")
-rpy*f
-print("RPY after correction")
-calcRPY(mr_recalculated_1)*f
-calcRPY(mr)*f
+print("Magnetic Field Frame RPY before correction")
+calcRPY(mr)*toDeg
+print("Magnetic Field Frame RPY after correction")
+calcRPY(mr_recalculated_1)*toDeg
 
-mrr_ril_corrected <- toBF(rpy,fromMFFToIF(declination, t(eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3])) %*% fromIFToMFF(declination, mr)))
-newRpy <- calcRPY(mrr_ril_corrected)
+#mrr_real_corrected <- round(toBF(rpy,t(eucMatrix(0, 0, iyaw_err)) %*% fromMFFToIF(declination, t(eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3])) %*% fromIFToMFF(declination, mr))),10)
+mrr_real_corrected <- t(IF_NEW_RPY_MATRIX) %*% mr
+print("Error from mag reference in Body Frame after correction")
+round(mrr_real - mrr_real_corrected, 10)
+
+newRpy <- round(calcRPY(mrr_real_corrected),10)
 mrrRpy <- calcRPY(mrr)
-mrRpy <- calcRPY(mr)
 
-print(c("Old RPY: ", mrrRpy[1]*toDeg, mrrRpy[2]*toDeg, mrrRpy[3]*toDeg))
-print(c("New RPY: ", newRpy[1]*toDeg, newRpy[2]*toDeg, newRpy[3]*toDeg))
+print(c("Old MagRef RPY: ", mrrRpy[1]*toDeg, mrrRpy[2]*toDeg, mrrRpy[3]*toDeg))
+print(c("New MagRef RPY: ", newRpy[1]*toDeg, newRpy[2]*toDeg, newRpy[3]*toDeg))
+
+print("Error from mag reference in Body Frame after correction with the new rotation matrix")
+round(mr - IF_NEW_RPY_MATRIX%*%mrr_real_corrected,10)
+round(mrr_real - t(IF_NEW_RPY_MATRIX)%*%mr,10)
 

@@ -277,7 +277,12 @@ makeDecRefInIF <- function(declination) {
 # RPY reference is vector c(0,0,1) = -g
 calcRPY <- function(v) {
   ipitch <- -asin(v[1])
-  iroll <- acos(round(v[3]/cos(ipitch), 5))
+  arg <- v[3]/cos(ipitch)
+  if(abs(arg) <= 1) {
+    iroll <- acos(arg)
+  } else {
+    iroll <- 0
+  }
   if(v[2] < 0) {
     iroll = -iroll
   }
@@ -320,57 +325,75 @@ toBFTest(as.matrix(c(10*toRad,0,0*toRad)), as.matrix(c(0,0,1)),as.matrix(c(0,0.1
 declination = 58.21*toRad
 
 # estimation of roll, pitch from accel and yaw from mag in body frame
-rpy <- c(0*toRad,10*toRad,0*toRad)
-
-# Declination coordinate reference in inertial frame
-mr <- makeDecRefInIF(declination) 
-
-# expected meausure from Mag in body frame
-mrr <- toBF(rpy, mr) 
+rpy <- c(37*toRad,0*toRad,0*toRad)
 
 # real rpy (I force some roll,pitch,yaw difference)
-rpy_real = rpy + c(0*toRad,6*toRad,0*toRad)
+rpy_real = rpy + c(6*toRad,0*toRad,0*toRad)
 
+# declination coordinate reference in inertial frame
+mr_ref_if <- makeDecRefInIF(declination) 
+
+# expected meausure from Mag in body frame
+mr_bf_expected <- toBF(rpy, mr_ref_if) 
 # real measures in body frame
-mrr_real <- toBF(rpy_real,mr)
+mr_bf_real <- toBF(rpy_real,mr_ref_if)
 
-# Roll, Pitch, Yaw Error Calculation for Mag
-iyaw_err <- calcRPY(toIF(rpy, mrr_real))[3]
-mr_ref <- fromIFToMFF(declination, eucMatrix(0, 0, iyaw_err) %*% toIF(rpy, mrr_real))
-irpy_err <- calcRPY(mr_ref)
-irpy_err[3] <- 0
+# magnetic field reference in ipothetic inertial frame (if_tilde)
+mr_ref_if_tilde <- toIF(rpy, mr_bf_real)
+
+# magnetic field reference in ipothetic magnetic field frame (mff_tilde)
+mr_ref_mff_tilde <- fromIFToMFF(declination, mr_ref_if_tilde)
+# Roll, Pitch Error Calculation in mff_tilde
+irpy_err <- calcRPY(mr_ref_mff_tilde)
+#irpy_err[3] <- 0
+
+# magnetic field reference in magnetic field frame (mff)
+mr_ref_mff <- eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% mr_ref_mff_tilde
+
+# yaw calculation in Inertial Frame
+mr_ref_if_to_correct_yaw <- fromMFFToIF(declination, mr_ref_mff)
+iyaw_err <- calcRPY(mr_ref_if_to_correct_yaw)[3]
+
+# magnetic field reference in inertial frame obtained by correction
+mr_ref_if_recalculated <- eucMatrix(0,0,iyaw_err)%*% mr_ref_if_to_correct_yaw
+
+print("Error in magnetic field frame after Roll,Pitch correction")
+t(round(mr_ref_mff - as.matrix(c(0,0,1)),10))
+print("Error in magnetic field frame after Yaw correction")
+t(round(mr_ref_if - mr_ref_if_recalculated,10))
 
 # from mag reference in Inertial Frame to mag reference in Body Frame with error correction
 # must be equal to mrr_real (real mag reference)
-IFCorrectionMatrix <- fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFFMatrix(declination) %*% eucMatrix(0, 0, iyaw_err)
+IFCorrectionMatrix <- eucMatrix(0, 0, iyaw_err) %*% fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], 0) %*% fromIFToMFFMatrix(declination) 
 IF_NEW_RPY_MATRIX <- IFCorrectionMatrix %*% toIFMatrix(rpy)
 
 # Correzione in inertial frame
 # OK! this can work.
-#mr_recalculated_1 <- round(fromMFFToIF(declination, eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFF(declination, eucMatrix(0, 0, iyaw_err) %*% toIF(rpy, mrr_real))),10)
-mr_recalculated_1 <- IF_NEW_RPY_MATRIX %*% mrr_real
+mr_ref_if_recalculated_1 <- IF_NEW_RPY_MATRIX %*% mr_bf_real
 print("Error from mag reference in Inertial Frame before correction")
-round(mr - toIF(rpy, mrr_real),10)
-print("Error from mag reference in Inertial Frame after correction")
-round(mrr - toBF(rpy, mr_recalculated_1), 10)
-
-print("Magnetic Field Frame RPY before correction")
-calcRPY(mr)*toDeg
-print("Magnetic Field Frame RPY after correction")
-calcRPY(mr_recalculated_1)*toDeg
-
-#mrr_real_corrected <- round(toBF(rpy,t(eucMatrix(0, 0, iyaw_err)) %*% fromMFFToIF(declination, t(eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3])) %*% fromIFToMFF(declination, mr))),10)
-mrr_real_corrected <- t(IF_NEW_RPY_MATRIX) %*% mr
+t(round(mr_ref_if - mr_ref_if_tilde,10))
 print("Error from mag reference in Body Frame after correction")
-round(mrr_real - mrr_real_corrected, 10)
+t(round(mr_bf_real - t(IF_NEW_RPY_MATRIX) %*% mr_ref_if_recalculated_1, 10))
 
-newRpy <- round(calcRPY(mrr_real_corrected),10)
-mrrRpy <- calcRPY(mrr)
+print("Magnetic Field RPY before correction")
+t(round(calcRPY(mr_ref_if_tilde)*toDeg,7))
+print("Magnetic Field RPY after correction")
+t(round(calcRPY(mr_ref_if_recalculated_1)*toDeg,7))
 
-print(c("Old MagRef RPY: ", mrrRpy[1]*toDeg, mrrRpy[2]*toDeg, mrrRpy[3]*toDeg))
-print(c("New MagRef RPY: ", newRpy[1]*toDeg, newRpy[2]*toDeg, newRpy[3]*toDeg))
-
-print("Error from mag reference in Body Frame after correction with the new rotation matrix")
-round(mr - IF_NEW_RPY_MATRIX%*%mrr_real_corrected,10)
-round(mrr_real - t(IF_NEW_RPY_MATRIX)%*%mr,10)
+#################################################################################
+#### Some Test
+# FIXME: with pitch = 0, there is some problem with mr_ref_mff_tilde
+#> mr_ref_mff_tilde
+#[,1]
+#[1,] -0.002452976
+#[2,] -0.088847589
+#[3,]  0.996042212
+#> -asin(-0.002452976)*toDeg
+#[1] 0.1405453  <----------- must be 0!
+#################################################################################
+# Check with gravity
+newRPY <- calcRPY(t(IF_NEW_RPY_MATRIX) %*% as.matrix(c(0,0,1)))
+newRPY[3] <- iyaw_err + rpy[3]
+print("Real Roll, Pitch, Yaw")
+t(newRPY*toDeg)
 

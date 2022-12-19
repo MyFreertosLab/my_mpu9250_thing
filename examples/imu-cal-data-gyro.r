@@ -277,12 +277,7 @@ makeDecRefInIF <- function(declination) {
 # RPY reference is vector c(0,0,1) = -g
 calcRPY <- function(v) {
   ipitch <- -asin(v[1])
-  arg <- v[3]/cos(ipitch)
-  if(abs(arg) <= 1) {
-    iroll <- acos(arg)
-  } else {
-    iroll <- 0
-  }
+  iroll <- atan2(v[2], v[3])
   if(v[2] < 0) {
     iroll = -iroll
   }

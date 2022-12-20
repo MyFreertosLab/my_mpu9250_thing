@@ -2,6 +2,7 @@ library(rgl)
 # from: https://search.r-project.org/CRAN/refmans/matlib/html/vectors3d.html
 library(matlib)
 
+vec <- rbind(diag(3), c(1,1,1))
 rownames(vec) <- c("X", "Y", "Z", "J")
 open3d()
 vectors3d(vec, color=c(rep("black",3), "red"), lwd=2)

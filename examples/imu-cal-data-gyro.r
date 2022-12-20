@@ -234,6 +234,17 @@ eucMatrix <- function(roll, pitch, yaw) {
            ), nrow=3, ncol=3, byrow = TRUE)
   return(RES)
 }
+eucMatrixRPY <- function(rpy) {
+  roll <- rpy[1]
+  pitch <- rpy[2]
+  yaw =   rpy[3]
+  RES <- matrix(c(
+    cos(yaw)*cos(pitch), cos(yaw)*sin(pitch)*sin(roll)-sin(yaw)*cos(roll), cos(yaw)*sin(pitch)*cos(roll)+sin(yaw)*sin(roll),
+    sin(yaw)*cos(pitch), sin(yaw)*sin(pitch)*sin(roll)+cos(yaw)*cos(roll), sin(yaw)*sin(pitch)*cos(roll)-cos(yaw)*sin(roll),
+    -sin(pitch), cos(pitch)*sin(roll), cos(pitch)*cos(roll)
+  ), nrow=3, ncol=3, byrow = TRUE)
+  return(RES)
+}
 crossMatrix <- function(u) {
   RES <- matrix(c(
     0, -u[3], u[2],
@@ -260,7 +271,7 @@ toBF <- function(rpy, v) {
   return(toBFMatrix(rpy) %*% v)
 }
 fromMFFToIFMatrix <- function(declination) {
-  return(eucMatrix(0,(pi/2+declination),0))
+  return(eucMatrix(0, (pi/2+declination),0))
 }
 fromIFToMFFMatrix <- function(declination) {
   return(t(fromMFFToIFMatrix(declination)))  
@@ -272,15 +283,21 @@ fromMFFToIF <- function(declination, v) {
   return(fromMFFToIFMatrix(declination) %*% v)
 }
 makeDecRefInIF <- function(declination) {
-  return(round(fromMFFToIF(declination, matrix(c(0,0,1))),10))
+  return(fromMFFToIF(declination, as.matrix(c(0,0,1))))
 }
 # RPY reference is vector c(0,0,1) = -g
-calcRPY <- function(v) {
+calcRP <- function(v) {
   ipitch <- -asin(v[1])
-  iroll <- atan2(v[2], v[3])
-  if(v[2] < 0) {
-    iroll = -iroll
+  if(v[3] < 0 && v[1] > 0) {
+    ipitch <- pi-ipitch
   }
+
+  arg <- min(1,max(-1,v[3]/cos(ipitch)))
+  iroll <- acos(arg)
+  if(v[2] < 0) {
+    iroll <- -iroll
+  }
+  
   if(iroll > pi) {
     iroll = iroll - 2*pi
   } else if(iroll < -pi) {
@@ -290,7 +307,11 @@ calcRPY <- function(v) {
   result <- as.matrix(c(iroll, ipitch, iyaw))
   return(result)
 }
-
+calcYaw <- function(v) {
+  iyaw <- -atan2(v[2], v[1])
+  result <- as.matrix(c(0, 0, iyaw))
+  return(result)
+}
 toBFTest <- function(rpy, v, v_expected) {
   v_actual <- toBF(rpy, v)
   stopifnot(round(v_actual,7) == round(v_expected,7))
@@ -301,7 +322,20 @@ toIFTest <- function(rpy, v, v_expected) {
   stopifnot(round(v_actual,7) == round(v_expected,7))
   return(TRUE)
 }
-
+calcRPTest <- function(rpy) {
+  rpy[3]<-0
+  v <- toBF(rpy, as.matrix(c(0,0,1)))
+  new_rpy <- calcRP(v)
+  new_rpy[3]<-0
+  stopifnot(round(rpy - new_rpy, 6) == c(0,0,0))
+}
+calcYawTest <- function(rpy) {
+  rpy[1]<-0
+  rpy[2]<-0
+  v <- toBF(rpy, as.matrix(c(1,0,0)))
+  new_rpy <- calcYaw(v)
+  stopifnot(round(rpy - new_rpy, 10) == c(0,0,0))
+}
 toBFTest(as.matrix(c(0,0,90*toRad)), as.matrix(c(1,0,0)),as.matrix(c(0,-1,0)))
 toIFTest(as.matrix(c(0,0,90*toRad)),as.matrix(c(0,-1,0)), as.matrix(c(1,0,0)))
 toBFTest(as.matrix(c(0,90*toRad,0)), as.matrix(c(1,0,0)),as.matrix(c(0,0,1)))
@@ -310,6 +344,17 @@ toBFTest(as.matrix(c(0,90*toRad,90*toRad)), as.matrix(c(1,0,0)),as.matrix(c(0,-1
 toIFTest(as.matrix(c(0,90*toRad,90*toRad)),as.matrix(c(0,-1,0)), as.matrix(c(1,0,0)))
 toBFTest(as.matrix(c(90*toRad,0,0*toRad)), as.matrix(c(0,0,1)),as.matrix(c(0,1,0)))
 toBFTest(as.matrix(c(10*toRad,0,0*toRad)), as.matrix(c(0,0,1)),as.matrix(c(0,0.1736482,0.9848078)))
+
+calcRPTest(as.matrix(c(0,0,90*toRad)))
+calcRPTest(as.matrix(c(10*toRad,20*toRad,90*toRad)))
+calcRPTest(as.matrix(c(-10*toRad,-20*toRad,90*toRad)))
+calcRPTest(as.matrix(c(100*toRad,0*toRad,0*toRad)))
+calcRPTest(as.matrix(c(-100*toRad,0*toRad,0*toRad)))
+calcYawTest(as.matrix(c(0,0,90*toRad)))
+calcYawTest(as.matrix(c(10*toRad,20*toRad,90*toRad)))
+calcYawTest(as.matrix(c(-10*toRad,-20*toRad,90*toRad)))
+calcYawTest(as.matrix(c(100*toRad,0*toRad,90*toRad)))
+calcYawTest(as.matrix(c(-100*toRad,.200*toRad,90*toRad)))
 
 # 
 # With Inertial Frame Axis:
@@ -320,10 +365,10 @@ toBFTest(as.matrix(c(10*toRad,0,0*toRad)), as.matrix(c(0,0,1)),as.matrix(c(0,0.1
 declination = 58.21*toRad
 
 # estimation of roll, pitch from accel and yaw from mag in body frame
-rpy <- c(37*toRad,0*toRad,0*toRad)
+rpy <- c(0*toRad,0*toRad,0*toRad)
 
 # real rpy (I force some roll,pitch,yaw difference)
-rpy_real = rpy + c(6*toRad,0*toRad,0*toRad)
+rpy_real = rpy + c(40*toRad,0*toRad,0*toRad)
 
 # declination coordinate reference in inertial frame
 mr_ref_if <- makeDecRefInIF(declination) 
@@ -339,18 +384,15 @@ mr_ref_if_tilde <- toIF(rpy, mr_bf_real)
 # magnetic field reference in ipothetic magnetic field frame (mff_tilde)
 mr_ref_mff_tilde <- fromIFToMFF(declination, mr_ref_if_tilde)
 # Roll, Pitch Error Calculation in mff_tilde
-irpy_err <- calcRPY(mr_ref_mff_tilde)
-#irpy_err[3] <- 0
+irpy_err <- calcRP(mr_ref_mff_tilde)
+irpy_err[3] <- 0
+#irpy_err[3] <- calcYaw(mr_ref_mff_tilde)
 
-# magnetic field reference in magnetic field frame (mff)
+# magnetic field reference in magnetic field frame (mff) => c(0,0,1)
 mr_ref_mff <- eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% mr_ref_mff_tilde
 
-# yaw calculation in Inertial Frame
-mr_ref_if_to_correct_yaw <- fromMFFToIF(declination, mr_ref_mff)
-iyaw_err <- calcRPY(mr_ref_if_to_correct_yaw)[3]
-
 # magnetic field reference in inertial frame obtained by correction
-mr_ref_if_recalculated <- eucMatrix(0,0,iyaw_err)%*% mr_ref_if_to_correct_yaw
+mr_ref_if_recalculated <- fromMFFToIF(declination, mr_ref_mff)
 
 print("Error in magnetic field frame after Roll,Pitch correction")
 t(round(mr_ref_mff - as.matrix(c(0,0,1)),10))
@@ -359,7 +401,7 @@ t(round(mr_ref_if - mr_ref_if_recalculated,10))
 
 # from mag reference in Inertial Frame to mag reference in Body Frame with error correction
 # must be equal to mrr_real (real mag reference)
-IFCorrectionMatrix <- eucMatrix(0, 0, iyaw_err) %*% fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], 0) %*% fromIFToMFFMatrix(declination) 
+IFCorrectionMatrix <- eucMatrix(0, 0, iyaw_err) %*% fromMFFToIFMatrix(declination) %*% eucMatrix(irpy_err[1], irpy_err[2], irpy_err[3]) %*% fromIFToMFFMatrix(declination) 
 IF_NEW_RPY_MATRIX <- IFCorrectionMatrix %*% toIFMatrix(rpy)
 
 # Correzione in inertial frame
@@ -368,27 +410,77 @@ mr_ref_if_recalculated_1 <- IF_NEW_RPY_MATRIX %*% mr_bf_real
 print("Error from mag reference in Inertial Frame before correction")
 t(round(mr_ref_if - mr_ref_if_tilde,10))
 print("Error from mag reference in Body Frame after correction")
-t(round(mr_bf_real - t(IF_NEW_RPY_MATRIX) %*% mr_ref_if_recalculated_1, 10))
+t(round(mr_bf_real - t(IF_NEW_RPY_MATRIX) %*% mr_ref_if, 10))
 
 print("Magnetic Field RPY before correction")
-t(round(calcRPY(mr_ref_if_tilde)*toDeg,7))
+t(round(calcRP(mr_ref_if_tilde)*toDeg,7))
 print("Magnetic Field RPY after correction")
-t(round(calcRPY(mr_ref_if_recalculated_1)*toDeg,7))
+t(round(calcRP(mr_ref_if_recalculated_1)*toDeg,7))
 
 #################################################################################
 #### Some Test
-# FIXME: with pitch = 0, there is some problem with mr_ref_mff_tilde
-#> mr_ref_mff_tilde
-#[,1]
-#[1,] -0.002452976
-#[2,] -0.088847589
-#[3,]  0.996042212
-#> -asin(-0.002452976)*toDeg
-#[1] 0.1405453  <----------- must be 0!
 #################################################################################
 # Check with gravity
-newRPY <- calcRPY(t(IF_NEW_RPY_MATRIX) %*% as.matrix(c(0,0,1)))
+newRPY <- calcRP(t(IF_NEW_RPY_MATRIX) %*% as.matrix(c(0,0,1)))
 newRPY[3] <- iyaw_err + rpy[3]
 print("Real Roll, Pitch, Yaw")
 t(newRPY*toDeg)
 
+# this is correct
+v <- toBF(rpy_real, fromMFFToIF(declination, as.matrix(c(0,0,1))))
+calcRP(round(IF_NEW_RPY_MATRIX %*% v,10))*toDeg
+
+calcRP(round(IF_NEW_RPY_MATRIX %*% mr_bf_real,10))*toDeg
+calcRP(toBF(rpy_real, as.matrix(c(0,0,1))))*toDeg
+
+ng_bf <- t(IF_NEW_RPY_MATRIX) %*% as.matrix(c(0,0,1))
+ng_bf_angle_mr <- acos(t(ng_bf)%*%mr_bf_real)*toDeg
+ng_bf_angle_mr
+ng_bf_angle_mr - declination*toDeg
+
+ng_bf_real <- toBF(rpy_real, as.matrix(c(0,0,1)))
+acos(t(mr_bf_real)%*%ng_bf_real)*toDeg
+calcRP(cross(mr_bf_real, ng_bf_real))*toDeg
+calcRP(fromIFToMFF(declination, toIF(rpy_real, cross(mr_bf_real, ng_bf_real))))*toDeg
+acos(t(ng_bf)%*%ng_bf_real)*toDeg
+
+cross(ng_bf, ng_bf_real)
+calcRP(cross(cross(mr_bf_real, ng_bf_real), cross(ng_bf, ng_bf_real)))*toDeg
+acos(t(cross(mr_bf_real, ng_bf_real))%*%cross(ng_bf, ng_bf_real))*toDeg
+
+calcRP(cross(ng_bf, ng_bf_real))*toDeg
+calcRP(fromIFToMFF(declination, toIF(rpy_real, cross(ng_bf, ng_bf_real))))*toDeg
+calcRP(cross(ng_bf, ng_bf_real))*toDeg
+
+calcRP(cross(cross(mr_bf_real, ng_bf_real), cross(ng_bf, mr_bf_real)))*toDeg
+
+calcRP(toIF(rpy_real, cross(ng_bf, mr_bf_real)))*toDeg
+calcRP(fromIFToMFF(declination, toIF(rpy_real, cross(ng_bf, mr_bf_real))))*toDeg
+calcRP(toIF(rpy_real, ng_bf))*toDeg
+calcRP(fromIFToMFF(declination, toIF(rpy_real, ng_bf)))*toDeg
+
+###########################################################################
+#### Visualization
+###########################################################################
+if_base <- diag(3)
+rownames(if_base) <- c("X", "Y", "Z")
+
+bfm <- toIFMatrix(rpy_real)
+bf_base <- rbind(t(bfm%*%c(1,0,0)),t(bfm%*%c(0,1,0)),t(bfm%*%c(0,0,1)))
+rownames(bf_base) <- c("X", "Y", "Z")
+
+mfm <- fromMFFToIFMatrix(declination)
+mff_base <- rbind(t(mfm%*%c(1,0,0)), t(mfm%*%c(0,1,0)),t(mfm%*%c(0,0,1)))
+rownames(mff_base) <- c("X", "Y", "Z")
+
+open3d()
+vectors3d(if_base, color=c(rep("black",3)), lwd=2, draw = TRUE)
+vectors3d(bf_base, color=c(rep("blue",3)), lwd=2)
+vectors3d(mff_base, color=c(rep("green",3)), lwd=2)
+
+v <- rbind(t(toIF(rpy_real, mr_bf_real)), t(toIF(rpy_real, ng_bf)))
+rownames(v) <- c("mr_bf_real", "ng_bf")
+vectors3d(v, color=c(rep("red",2)), lwd=2)
+planes3d(0, 0, 1, 0, col="gray", alpha=0.2)
+highlevel() 
+rgl.bringtotop()

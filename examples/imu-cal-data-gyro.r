@@ -127,10 +127,8 @@ sada_S_matrix <- function(K) {
 
 sada_L_parameters <- function(B) {
   a1 <- B[1,1]-B[3,3]-1
-  a2 <-B[2,1]^2/a1-B[1,1]-B[3,3]-1
-  tau <- B[1,3]+B[3,1]
-  y23 <- (B[2,3]+B[2,1]*(tau/a1))/a2
-  a3 <- a1 - 2 + tau^2/a1 + y23^2*a2
+  a2 <- -B[2,1]^2/a1-B[1,1]-B[3,3]-1
+  a3 <- -(B[2,3]-B[2,1]*(B[1,3]+B[3,1])/a1)^2/a2-(B[1,3]+B[3,1])^2/a1+B[3,3]-B[1,1]-1
   return(as.matrix(c(a1, a2, a3)))
 }
 
@@ -192,7 +190,6 @@ sada_T_matrix <- function(K,B) {
 }
 
 ## Test 1
-## FIXME: pars: a2 and a3 are not correct
 mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
 ar <- as.matrix(c(0,0,1))
 m <- as.matrix(c(0.96361408, 0.25812689, -0.06941483))
@@ -205,10 +202,12 @@ pars <- sada_L_parameters(B)
 L1 <- sada_L1_matrix(S, pars[1])
 S1 <- L1 %*%S
 S1
-L2 <- sada_L2_matrix(S1, -1.59635357)
+#L2 <- sada_L2_matrix(S1, -1.59635357)
+L2 <- sada_L2_matrix(S1, pars[2])
 S2 <- L2 %*%S1
 S2
-L3 <- sada_L3_matrix(S2, -0.28029031)
+#L3 <- sada_L3_matrix(S2, -0.28029031)
+L3 <- sada_L3_matrix(S2, pars[3])
 S3 <- L3 %*%S2
 S3
 TR <- L3 %*% L2 %*% L1 %*% S
@@ -225,10 +224,6 @@ Q2EA(q1,EulerOrder = "xyz")*toDeg # roll, pitch, yaw hanno segno inverso
 Q2EA(Qconj(q1),EulerOrder = "zyx")*toDeg
 
 ## Test 2 North-East-Down & Quaternions
-#######################################
-### FIXME: ridefinire i calcoli SADA
-### per a2 ed a3.
-#######################################
 mr <- as.matrix(c(cos(declination), 0, sin(declination)))
 ar <- as.matrix(c(0,0,1))
 rm <- eucMatrix(21.4*toRad,14.38*toRad, 25.01*toRad)
@@ -243,10 +238,10 @@ pars <- sada_L_parameters(B)
 L1 <- sada_L1_matrix(S, pars[1])
 S1 <- L1 %*%S
 S1
-L2 <- sada_L2_matrix(S1, -1.924384537) # Calcolare a2 correttamente (in sada_L_parameters)
+L2 <- sada_L2_matrix(S1, pars[2]) # Calcolare a2 correttamente (in sada_L_parameters)
 S2 <- L2 %*%S1
 S2
-L3 <- sada_L3_matrix(S2, -0.17395680) # Calcolare a3 correttamente (n sada_L_parameters)
+L3 <- sada_L3_matrix(S2, pars[3]) # Calcolare a3 correttamente (n sada_L_parameters)
 S3 <- L3 %*%S2
 S3
 TR <- L3 %*% L2 %*% L1 %*% S
@@ -410,13 +405,21 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
 
 
 ### Simplified Attitude Determination Algorithm
+###############################################
+### FIXME: sostituire i calcoli di a,b,c
+### a1 <- B[1,1]-B[3,3]-1
+### a2 <- -B[2,1]^2/a1-B[1,1]-B[3,3]-1
+### a3 <- -(B[2,3]-B[2,1]*(B[1,3]+B[3,1])/a1)^2/a2-(B[1,3]+B[3,1])^2/a1+B[3,3]-B[1,1]-1
+### TODO: continuare verificando e/o correggendo:
+### mutate(Y31 = (tau+B21*Y23)/(a1*a3), Y32 = Y23/a3, Y33 = 1/a3)
+###############################################
 SADA <- imu.cal.data.gyro_rp_amg %>%
   mutate(TDEC = -asin(MX*AX+MY*AY+MZ*AZ)*toDeg) %>%
   mutate(MD = MX*AX+MY*AY+MZ*AZ, MN = sqrt(1-MD^2)) %>%
   mutate(B11 = 0.5*MN*MX, B13 = 0.5*(AX+MD*MX), B21 = 0.5*MN*MY, B23 = 0.5*(AY+MD*MY), B31 = 0.5*MN*MZ, B33 = 0.5*(AZ+MD*MZ)) %>%
   mutate(tau = B13+B31) %>%
-  mutate(a1 = B11 - B33 -1, Y23 = tau/a1, a2 = B21^2/a1-B11-B33-1, p1 = a1, p2 = a2) %>% # TODO: Verificare p1, p2
-  mutate(Y11 = -1/a1, Y12 = B21/a1, Y13 = tau/a1, Y21 = -B21/(a1*a2), Y22 = 1/a2, Y23 = (B23+B21*Y13)/a2, a3 = p1 -2 + tau^2/p1+Y23^2*p2) %>%
+  mutate(a1 = B11 - B33 -1, Y23 = tau/a1, a2 = -B21^2/a1-B11-B33-1, a3 = -(B23-B21*(B13+B31)/a1)^2/a2-(B13+B31)^2/a1+B33-B11-1) %>% # TODO: Verificare p1, p2
+  mutate(Y11 = 1/a1, Y12 = -B21/a1, Y13 = -tau/a1, Y21 = -B21/(a1*a2), Y22 = 1/a2, Y23 = (B23+B21*Y13)/a2) %>%
   mutate(Y31 = (tau+B21*Y23)/(a1*a3), Y32 = Y23/a3, Y33 = 1/a3) %>%
   mutate(a = B23*(Y11+Y12*(Y21+Y23*Y31) + Y13*Y31) - (B13 - B31)*(Y21+Y23*Y31) - Y31*B21) %>%
   mutate(b = B23*(Y12*(Y22+Y23*Y32) + Y13*Y32) - (B13 - B31)*(Y22+Y23*Y32) - Y31*B21) %>%

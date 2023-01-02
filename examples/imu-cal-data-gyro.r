@@ -189,6 +189,26 @@ sada_T_matrix <- function(K,B) {
   return(TR)
 }
 
+sada_quaternion <- function(B) {
+  pars <- sada_L_parameters(B)
+  tau <- B[1,3]+B[3,1]
+  Y11 = 1/pars[1]
+  Y22 = 1/pars[2]
+  Y33 = 1/pars[3]
+  Y12 = -B[2,1]/pars[1]
+  Y13 = -tau/pars[1]
+  Y21 = -B[2,1]/(pars[1]*pars[2])
+  Y23 = -(B[2,1]*(-tau/pars[1])+B[2,3])/pars[2]
+  Y31 = -tau/(pars[1]*pars[3]) - tau*B[2,1]^2/(pars[1]^2*pars[2]*pars[3])+B[2,3]*B[2,1]/(pars[1]*pars[2]*pars[3])
+  Y32 = (tau*B[2,1]/pars[1]-B[2,3])/(pars[2]*pars[3])
+  a <- B[2,3]*(Y11+Y12*(Y21+Y23*Y31)+Y13*Y31)-(B[1,3]-B[3,1])*(Y21+Y23*Y31)-Y31*B[2,1]
+  b <- B[2,3]*(Y12*(Y22+Y23*Y32)+Y13*Y32)-(B[1,3]-B[3,1])*(Y22+Y23*Y32)-Y32*B[2,1]
+  c <- B[2,3]*(Y13*Y33+Y12*Y23*Y33)-Y33*B[2,1]-Y23*Y33*(B[1,3]-B[3,1])
+  n <- sqrt(a^2+b^2+c^2+1)
+  q <- c(-1, a, b, c)/n
+  return(q)
+}
+
 ## Test 1
 mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
 ar <- as.matrix(c(0,0,1))

@@ -22,6 +22,7 @@ library(RSpincalc)
 toRad <- pi/180
 toDeg <- 1/toRad
 declination = 58.21*toRad
+accel_reference <- as.matrix(c(0,0,-1))
 
 ##################################################################################################
 #### Funzioni base per matrici di rotazione
@@ -80,13 +81,13 @@ fromMFFToIF <- function(declination, v) {
 makeDecRefInIF <- function(declination) {
   return(fromMFFToIF(declination, as.matrix(c(0,0,1))))
 }
-# RPY reference is vector c(0,0,1) = -g
+
 calcRP <- function(v) {
-  ipitch <- -asin(v[1])
+  ipitch <- -asin(v[1])*accel_reference[3]
   
-  arg <- min(1,max(-1,v[3]/cos(ipitch)))
+  arg <- min(1,max(-1,v[3]/cos(ipitch)))*accel_reference[3]
   iroll <- acos(arg)
-  if(v[2] < 0) {
+  if(v[2]*accel_reference[3] < 0) {
     iroll <- -iroll
   }
   
@@ -95,20 +96,20 @@ calcRP <- function(v) {
   } else if(iroll < -pi) {
     iroll = iroll + 2*pi
   }
-  iyaw <- -atan2(v[2], v[1])
+  iyaw <- atan2(v[2], v[1])*accel_reference[3]
   result <- as.matrix(c(iroll, ipitch, iyaw))
   return(result)
 }
 calcYaw <- function(v) {
-  iyaw <- -atan2(v[2], v[1])
+  iyaw <- atan2(v[2], v[1])*accel_reference[3]
   result <- as.matrix(c(0, 0, iyaw))
   return(result)
 }
 
 # m: magnetometer in body frame
 # a: accelerometer in body frame
-# mr: magnetometer reference in inertial frame (c(cos(declination, 0, -sin(declination))))
-# ar: accelerometer reference in inertial frame (c(0,0,1))
+# mr: magnetometer reference in inertial frame 
+# ar: accelerometer reference in inertial frame
 sada_B_matrix <- function(m, a, mr, ar) {
   B <- 0.5*(a%*%t(ar) + m%*%t(mr))
   return(B)    
@@ -210,10 +211,19 @@ sada_quaternion <- function(B) {
 }
 
 ## Test 1
-mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
-ar <- as.matrix(c(0,0,1))
-m <- as.matrix(c(0.96361408, 0.25812689, -0.06941483))
-a <- as.matrix(c(-0.77144974, -0.04735083, 0.63452597))
+#mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
+#ar <- as.matrix(c(0,0,1))
+#m <- as.matrix(c(0.96361408, 0.25812689, -0.06941483))
+#a <- as.matrix(c(-0.77144974, -0.04735083, 0.63452597))
+
+# North, East, Down
+mr <- as.matrix(c(cos(declination), 0, sin(declination)))
+ar <- as.matrix(c(0,0,-1))
+m <- as.matrix(c(0.96361408, -0.25812689, 0.06941483))
+a <- as.matrix(c(-0.77144974, 0.04735083, -0.63452597))
+MD <- -t(m)%*%a
+MN <- sqrt(1-(MD)^2)
+#mr <- as.matrix(c(MN, 0, MD))
 B <- sada_B_matrix(m, a, mr, ar)
 z <- sada_z_vector(B)
 K <- sada_K_matrix(B, z)
@@ -239,15 +249,15 @@ n <- sqrt(x^2+y^2+z^2+1)
 x <- x/n
 y <- y/n
 z <- z/n
-q1 <- t(as.matrix(c(1/n, -x, -y, -z))) # x, y, z sono negati (oppure negare w)
+q1 <- t(as.matrix(c(1/n, x, y, z)))
 Q2EA(q1,EulerOrder = "xyz")*toDeg # roll, pitch, yaw hanno segno inverso
 Q2EA(Qconj(q1),EulerOrder = "zyx")*toDeg
 
 ## Test 2 North-East-Down & Quaternions
 mr <- as.matrix(c(cos(declination), 0, sin(declination)))
-ar <- as.matrix(c(0,0,1))
-rm <- eucMatrix(21.4*toRad,14.38*toRad, 25.01*toRad)
-q <- DCM2Q(rm)
+ar <- as.matrix(c(0,0,-1))
+rm <- toBFMatrix(as.matrix(c(21.4*toRad,14.38*toRad, 25.01*toRad)))
+q <- DCM2Q(t(rm))
 m <- rm %*% mr
 a <- rm %*% ar
 B <- sada_B_matrix(m, a, mr, ar)
@@ -274,7 +284,7 @@ n <- sqrt(x^2+y^2+z^2+1)
 x <- x/n
 y <- y/n
 z <- z/n
-q1 <- t(as.matrix(c(1/n, -x, -y, -z))) # x, y, z sono negati (oppure negare w)
+q1 <- t(as.matrix(c(1/n, x, y, z))) # x, y, z sono negati (oppure negare w)
 Q2EA(q1,EulerOrder = "xyz")*toDeg # roll, pitch, yaw hanno segno inverso
 Q2EA(Qconj(q1),EulerOrder = "zyx")*toDeg
 Q2EA(q,EulerOrder = "xyz")*toDeg
@@ -298,10 +308,10 @@ toIFTest <- function(rpy, v, v_expected) {
 }
 calcRPTest <- function(rpy) {
   rpy[3]<-0
-  v <- toBF(rpy, as.matrix(c(0,0,1)))
+  v <- toBF(rpy, accel_reference)
   new_rpy <- calcRP(v)
   new_rpy[3]<-0
-  v1 <- toBF(new_rpy, as.matrix(c(0,0,1)))
+  v1 <- toBF(new_rpy, accel_reference)
   stopifnot(round(v - v1, 6) == c(0,0,0))
 }
 calcYawTest <- function(rpy) {
@@ -343,7 +353,8 @@ for(roll in -180:180) {
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
 imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
-imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],]
+#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
+imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],] %>% mutate(MY = -MY, MZ = -MZ, AY <- -AY, AZ = -AZ, GY = -GY, GZ = -GZ)
 
 # plot original data
 scatter3D(imu.cal.data.gyro$MX, imu.cal.data.gyro$MY, imu.cal.data.gyro$MZ, colvar = imu.cal.data.gyro$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
@@ -369,15 +380,15 @@ imu.cal.data.gyro_rp <- imu.cal.data.gyro.cnt %>%
   mutate(NRMM = sqrt(MX^2+MY^2+MZ^2)) %>%
   mutate(MX = MX/NRMM, MY = MY/NRMM, MZ = MZ/NRMM) %>%
   mutate(AX = AX/NRMA, AY = AY/NRMA, AZ = AZ/NRMA) %>%
-  mutate(PA = -asin(AX)*toDeg) %>%
-  mutate(RA = acos(round(AZ/cos(PA*toRad),10))*toDeg) %>%
-  mutate(RA = case_when(AY < 0 ~ -RA, TRUE ~ RA)) %>%
+  mutate(PA = -asin(AX)*accel_reference[3]*toDeg) %>%
+  mutate(RA = acos(round(AZ/cos(PA*toRad)*accel_reference[3],10))*toDeg) %>%
+  mutate(RA = case_when(AY*accel_reference[3] < 0 ~ -RA, TRUE ~ RA)) %>%
   mutate(RA = case_when(RA*toRad > pi ~ (RA*toRad-2*pi)*toDeg,RA*toRad < -pi ~ (RA*toRad+2*pi)*toDeg, TRUE ~ RA)) %>%
   mutate(
     ICMX = MX * cos(PA*toRad)   + MY*sin(PA*toRad)*sin(RA*toRad)  + MZ * sin(PA*toRad)*cos(RA*toRad),
     ICMY = 0                + MY*cos(RA*toRad)            - MZ*sin(RA*toRad),
     ICMZ = -MX*sin(PA*toRad)    + MY*cos(PA*toRad)*sin(RA*toRad)  + MZ*cos(PA*toRad)*cos(RA*toRad), 
-    YM = atan2(-ICMY,ICMX)*toDeg,
+    YM = atan2(ICMY,ICMX)*accel_reference[3]*toDeg,
     ICAX = AX * cos(PA*toRad)   + AY*sin(PA*toRad)*sin(RA*toRad)  + AZ * sin(PA*toRad)*cos(RA*toRad),
     ICAY = 0                + AY*cos(RA*toRad)            - AZ*sin(RA*toRad),
     ICAZ = -AX*sin(PA*toRad)    + AY*cos(PA*toRad)*sin(RA*toRad)  + AZ*cos(PA*toRad)*cos(RA*toRad), 
@@ -433,37 +444,82 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
 ### TODO: continuare verificando e/o correggendo:
 ### mutate(Y31 = (tau+B21*Y23)/(a1*a3), Y32 = Y23/a3, Y33 = 1/a3)
 ###############################################
-SADA <- imu.cal.data.gyro_rp_amg %>%
+sada_update_df <- function(df) {
+  for(row_idx in 1:dim(df)[1]) {
+    curr_data <- df[row_idx,]
+    m <- as.matrix(c(curr_data$MX, curr_data$MY,curr_data$MZ))
+    a <- as.matrix(c(curr_data$AX, curr_data$AY,curr_data$AZ))
+    m <- m/norm(m, "2")
+    a <- a/norm(a, "2")
+    ar <- as.matrix(c(0,0,-1))
+    MD = -t(m)%*%a
+    MN = sqrt(1-MD^2)
+    mr <- as.matrix(c(MN, 0, MD))
+
+    B <- sada_B_matrix(m, a, mr, ar)
+    q <- sada_quaternion(B)
+    rpy <- (Q2EA.Xiao(q,EulerOrder = "xyz")*toDeg)
+    df$sada_roll[row_idx] <- rpy[1]
+    df$sada_pitch[row_idx] <- rpy[2]
+    df$sada_yaw[row_idx] <- rpy[3]
+    df$w[row_idx] <- q[1]
+    df$a[row_idx] <- q[2]
+    df$b[row_idx] <- q[3]
+    df$c[row_idx] <- q[4]
+    df$MD[row_idx] <- MD
+    df$MN[row_idx] <- MN
+  }
+  return(df)
+}
+generate_df <- function() {
+  mr <- as.matrix(c(cos(declination), 0, sin(declination)))
+  ar <- as.matrix(c(0,0,-1))
+  mx <- c()
+  my <- c()
+  mz <- c()
+  ax <- c()
+  ay <- c()
+  az <- c()
+  aroll <- c()
+  apitch <- c()
+  ayaw <- c()
+  for(roll_deg in seq(-179,179,3)) {
+    for(pitch_deg in seq(-89,89,3)) {
+      ## Test 2 North-East-Down & Quaternions
+      rm <- toBFMatrix(as.matrix(c(roll_deg*toRad,pitch_deg*toRad, 25.01*toRad)))
+      m <- rm %*% mr
+      a <- rm %*% ar
+      mx = append(mx, m[1])
+      my = append(my, m[2])
+      mz = append(mz, m[3])
+      ax = append(ax, a[1])
+      ay = append(ay, a[2])
+      az = append(az, a[3])
+      aroll = append(aroll, roll_deg)
+      apitch = append(apitch, pitch_deg)
+      ayaw = append(ayaw, 25.01)
+    }
+  }
+  df <- data.frame(mx, my, mz, ax, ay, az, aroll, apitch, ayaw)
+  names(df) <- c('MX', 'MY', 'MZ', 'AX', 'AY', 'AZ', 'AROLL', 'APITCH', 'AYAW')
+  return(df)
+}
+imu.cal.data.gyro_sada <- sada_update_df(imu.cal.data.gyro_rp_amg)
+#df <- generate_df()
+#imu.cal.data.gyro_sada <- sada_update_df(df)
+#SADA <- imu.cal.data.gyro_sada
+
+SADA <- imu.cal.data.gyro_sada %>%
   mutate(TDEC = -asin(MX*AX+MY*AY+MZ*AZ)*toDeg) %>%
-  mutate(MD = MX*AX+MY*AY+MZ*AZ, MN = sqrt(1-MD^2)) %>%
-  mutate(B11 = 0.5*MN*MX, B13 = 0.5*(AX+MD*MX), B21 = 0.5*MN*MY, B23 = 0.5*(AY+MD*MY), B31 = 0.5*MN*MZ, B33 = 0.5*(AZ+MD*MZ)) %>%
-  mutate(tau = B13+B31) %>%
-  mutate(a1 = B11 - B33 -1, Y23 = tau/a1, a2 = -B21^2/a1-B11-B33-1, a3 = -(B23-B21*(B13+B31)/a1)^2/a2-(B13+B31)^2/a1+B33-B11-1) %>% # TODO: Verificare p1, p2
-  mutate(Y11 = 1/a1, Y12 = -B21/a1, Y13 = -tau/a1, Y21 = -B21/(a1*a2), Y22 = 1/a2, Y23 = (B23+B21*Y13)/a2) %>%
-  mutate(Y31 = (tau+B21*Y23)/(a1*a3), Y32 = Y23/a3, Y33 = 1/a3) %>%
-  mutate(a = B23*(Y11+Y12*(Y21+Y23*Y31) + Y13*Y31) - (B13 - B31)*(Y21+Y23*Y31) - Y31*B21) %>%
-  mutate(b = B23*(Y12*(Y22+Y23*Y32) + Y13*Y32) - (B13 - B31)*(Y22+Y23*Y32) - Y31*B21) %>%
-  mutate(c = B23*(Y13*Y33+Y12*Y23*Y33) - Y33*B21 - Y23*Y33*(B13 - B31)) %>%
-  mutate(qn = 1/sqrt(a^2+b^2+c^2+1), a = a*qn, b = b*qn, c = c*qn) %>%
-  mutate(sada_roll = -atan2(2*a*(-1)+2*b*c, 1-2*(a^2-b^2))*toDeg) %>%
-  mutate(sada_pitch = atan2(2*b*(-1)-2*a*c, 1-2*(b^2+c^2))*toDeg) %>%
-  mutate(sada_yaw = atan2(2*((-1)*c+a*b), 1-2*(b^2+c^2))*toDeg) %>%
-  mutate(
-    ISGX = GX * cos(sada_pitch*toRad)   + GY*sin(sada_pitch*toRad)*sin(sada_roll)  + GZ * sin(sada_pitch*toRad)*cos(sada_roll*toRad),
-    ISGY = 0                + GY*cos(sada_roll*toRad)            - GZ*sin(sada_roll*toRad),
-    ISGZ = -GX*sin(sada_pitch*toRad)    + GY*cos(sada_pitch*toRad)*sin(sada_roll*toRad)  + GZ*cos(sada_pitch*toRad)*cos(sada_roll*toRad), 
-  ) %>% 
-  mutate(
-    IGX = ISGX * cos(sada_yaw*toRad) - ISGY*sin(sada_yaw*toRad),
-    IGY = ISGX*sin(sada_yaw*toRad) + ISGY*cos(sada_yaw*toRad),
-    IGZ = ISGZ,
-  ) %>%
   mutate(DGROLL = GX*DT,DGPITCH = GY*DT, DGYAW = GZ*DT) %>%
   mutate(GROLL = cumsum(DGROLL) + mean(sada_roll[1:3000])) %>%
   mutate(GPITCH = cumsum(DGPITCH) + mean(sada_pitch[1:3000])) %>%
   mutate(GYAW = cumsum(DGYAW) + mean(sada_yaw[1:3000])) %>%
-  select(TS, DT, MD, MN, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ, IGX, IGY, IGZ, AROLL, APITCH, AYAW, sada_roll, sada_pitch, sada_yaw, GROLL, GPITCH, GYAW, DEC, TDEC, a, b, c)
-  
+  select(TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, DEC, TDEC, MN, MD, w, a, b, c)
+
+# Example of function call
+#SADA %>% mutate(u = pmap_dbl(cur_data(), ~ prova(c(...))))
+
 ylim_min <- min(SADA$sada_roll, SADA$GROLL,SADA$AROLL) - 0.5
 ylim_max <- max(SADA$sada_roll, SADA$GROLL,SADA$AROLL) + 0.5
 plot(SADA$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red) vs SADA_ROLL (blue)", ylab = "Roll", ylim = c(ylim_min,ylim_max))

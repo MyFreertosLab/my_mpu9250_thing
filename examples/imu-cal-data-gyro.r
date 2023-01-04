@@ -471,6 +471,53 @@ sada_update_df <- function(df) {
   }
   return(df)
 }
+
+gyroacc_fusion <- function(df, gamma) {
+  qprev = NULL
+  for(row_idx in 1:dim(df)[1]) {
+    curr_data <- df[row_idx,]
+    if(is.null(qprev)) {
+      qprev <- t(DCM2Q(toBFMatrix(as.matrix(c(curr_data$AROLL*toRad, curr_data$APITCH*toRad, curr_data$AYAW*toRad)))))
+      q <- qprev
+      ng <- Q2DCM(t(q))%*%(accel_reference)
+      df$ngx[row_idx] <- ng[1]
+      df$ngy[row_idx] <- ng[2]
+      df$ngz[row_idx] <- ng[3]
+      rpy <- Q2EA.Xiao(t(q), EulerOrder = "xyz")
+      df$ng_roll[row_idx] = rpy[1]*toDeg
+      df$ng_pitch[row_idx] = rpy[2]*toDeg
+      df$ng_yaw[row_idx] = rpy[3]*toDeg
+      next
+    }    
+    omega <- matrix(c(
+      0,              -curr_data$GX, -curr_data$GY, -curr_data$GZ,
+      curr_data$GX,   0,             curr_data$GZ,  -curr_data$GY,
+      curr_data$GY,  -curr_data$GZ,  0,             curr_data$GX,
+      curr_data$GZ,  curr_data$GY,   -curr_data$GX, 0
+    ), nrow = 4, ncol = 4, byrow = T)
+    omega <- omega*toRad
+    W <- matrix(c(
+      curr_data$AZ,   curr_data$AY,  -curr_data$AX,    0,
+      curr_data$AY,   -curr_data$AZ,  0,               curr_data$AX,
+      -curr_data$AX,  0,             -curr_data$AZ,    curr_data$AY,
+      0,              curr_data$AX,   curr_data$AY,    curr_data$AZ
+    ), nrow = 4, ncol = 4, byrow = T)
+    dt <- as.double(curr_data$DT)
+    q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma/2*(W + diag(1,4))%*%qprev
+    q <- q/norm(q, "2")
+    qprev <- q
+    ng <- Q2DCM(t(q))%*%(accel_reference)
+    df$ngx[row_idx] <- ng[1]
+    df$ngy[row_idx] <- ng[2]
+    df$ngz[row_idx] <- ng[3]
+    rpy <- Q2EA.Xiao(t(q), EulerOrder = "xyz")
+    df$ng_roll[row_idx] = rpy[1]*toDeg
+    df$ng_pitch[row_idx] = rpy[2]*toDeg
+    df$ng_yaw[row_idx] = rpy[3]*toDeg
+  }  
+  return(df)
+}
+
 generate_df <- function() {
   mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
   ar <- as.matrix(c(0,0,-1))
@@ -516,6 +563,8 @@ SADA <- imu.cal.data.gyro_sada %>%
   mutate(GPITCH = cumsum(DGPITCH) + mean(sada_pitch[1:3000])) %>%
   mutate(GYAW = cumsum(DGYAW) + mean(sada_yaw[1:3000])) %>%
   select(TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, DEC, TDEC, MN, MD, w, a, b, c)
+
+df <- gyroacc_fusion(SADA, 0.01)
 
 # Example of function call
 #SADA %>% mutate(u = pmap_dbl(cur_data(), ~ prova(c(...))))

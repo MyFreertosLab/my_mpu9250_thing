@@ -567,7 +567,7 @@ generate_df <- function() {
   names(df) <- c('MX', 'MY', 'MZ', 'AX', 'AY', 'AZ', 'AROLL', 'APITCH', 'AYAW')
   return(df)
 }
-imu.cal.data.gyro_sada <- sada_update_df(gyroacc_fusion(imu.cal.data.gyro_rp_amg, 0.5))
+imu.cal.data.gyro_sada <- sada_update_df(gyroacc_fusion(imu.cal.data.gyro_rp_amg, 0.7))
 #df <- generate_df()
 #imu.cal.data.gyro_sada <- sada_update_df(df)
 #SADA <- imu.cal.data.gyro_sada
@@ -603,6 +603,21 @@ plot(SADA$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red) vs SADA_YAW (blue)"
 lines(SADA$sada_yaw, col="blue", )
 lines(SADA$GYAW, col="red")
 lines(SADA$ng_yaw, col="brown")
+
+ylim_min <- min(SADA$AX, SADA$sada_ngx) - 0.5
+ylim_max <- max(SADA$AX, SADA$sada_ngx) + 0.5
+plot(SADA$AX, type="l", main = "AX (Black) vs NGX (Red)", ylab = "AX vs. NGX", ylim = c(ylim_min,ylim_max))
+lines(SADA$ngx, col="red", )
+
+ylim_min <- min(SADA$AY, SADA$sada_ngy) - 0.5
+ylim_max <- max(SADA$AY, SADA$sada_ngy) + 0.5
+plot(SADA$AY, type="l", main = "AY (Black) vs NGY (Red)", ylab = "AY vs. NGY", ylim = c(ylim_min,ylim_max))
+lines(SADA$ngy, col="red", )
+
+ylim_min <- min(SADA$AZ, SADA$sada_ngz) - 0.5
+ylim_max <- max(SADA$AZ, SADA$sada_ngz) + 0.5
+plot(SADA$AZ, type="l", main = "AZ (Black) vs NGZ (Red)", ylab = "AZ vs. NGZ", ylim = c(ylim_min,ylim_max))
+lines(SADA$ngz, col="red", )
 
 mdec<- mean(SADA$TDEC)
 vardec <- var(SADA$TDEC)

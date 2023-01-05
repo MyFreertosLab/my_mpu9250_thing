@@ -351,8 +351,8 @@ for(roll in -180:180) {
 ### Load Data
 #######################################################################################
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
-#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
+#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],] %>% mutate(MY = -MY, MZ = -MZ, AY <- -AY, AZ = -AZ, GX = -GX, GY = -GY, GZ = -GZ)
 
@@ -432,8 +432,11 @@ ts_data <- imu.cal.data.gyro_rp %>% filter(MV == 1) %>% select(TS)
 
 imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV == 1) %>% select(-GX, -GY, -GZ, -TS), gyro_data_means) %>%
   rename(GX = GX_MEAN, GY = GY_MEAN, GZ = GZ_MEAN) %>%
-  mutate(DT = (TS - shift(TS, 1, fill = TS[1], type = "lag"))/1000)
-
+  mutate(DT = (TS - shift(TS, 1, fill = TS[1], type = "lag"))/1000) %>%
+  mutate(DMX = (MX - shift(MX, 1, fill = MX[1], type = "lag"))) %>%
+  mutate(DMY = (MY - shift(MY, 1, fill = MY[1], type = "lag"))) %>%
+  mutate(DMZ = (MZ - shift(MZ, 1, fill = MZ[1], type = "lag")))
+  
 
 ### Simplified Attitude Determination Algorithm
 ###############################################
@@ -448,7 +451,7 @@ sada_update_df <- function(df) {
   for(row_idx in 1:dim(df)[1]) {
     curr_data <- df[row_idx,]
     m <- as.matrix(c(curr_data$MX, curr_data$MY,curr_data$MZ))
-    a <- as.matrix(c(curr_data$AX, curr_data$AY,curr_data$AZ))
+    a <- as.matrix(c(curr_data$ngx, curr_data$ngy,curr_data$ngz))
     m <- m/norm(m, "2")
     a <- a/norm(a, "2")
     ar <- as.matrix(c(0,0,-1))
@@ -468,16 +471,23 @@ sada_update_df <- function(df) {
     df$c[row_idx] <- q[4]
     df$MD[row_idx] <- MD
     df$MN[row_idx] <- MN
+    ng <- Q2DCM(t(q))%*%(accel_reference)
+    df$sada_ngx[row_idx] <- ng[1]
+    df$sada_ngy[row_idx] <- ng[2]
+    df$sada_ngz[row_idx] <- ng[3]
+    
   }
   return(df)
 }
 
 gyroacc_fusion <- function(df, gamma) {
   qprev = NULL
+  prev_data = NULL
   for(row_idx in 1:dim(df)[1]) {
     curr_data <- df[row_idx,]
     if(is.null(qprev)) {
       qprev <- t(DCM2Q(toBFMatrix(as.matrix(c(curr_data$AROLL*toRad, curr_data$APITCH*toRad, curr_data$AYAW*toRad)))))
+      prev_data <- curr_data
       q <- qprev
       ng <- Q2DCM(t(q))%*%(accel_reference)
       df$ngx[row_idx] <- ng[1]
@@ -496,16 +506,22 @@ gyroacc_fusion <- function(df, gamma) {
       curr_data$GZ,  curr_data$GY,   -curr_data$GX, 0
     ), nrow = 4, ncol = 4, byrow = T)
     omega <- omega*toRad
+    ds <- -as.matrix(c(
+      curr_data$AX - prev_data$AX,
+      curr_data$AY - prev_data$AY,
+      curr_data$AZ - prev_data$AZ
+    ))
     W <- matrix(c(
-      curr_data$AZ,   curr_data$AY,  -curr_data$AX,    0,
-      curr_data$AY,   -curr_data$AZ,  0,               curr_data$AX,
-      -curr_data$AX,  0,             -curr_data$AZ,    curr_data$AY,
-      0,              curr_data$AX,   curr_data$AY,    curr_data$AZ
+      ds[3],    -ds[2],  -ds[1],    0,
+      ds[2],    -ds[3], 0,         ds[1],
+      -ds[1],   0,      -ds[3],    -ds[2],
+      0,        ds[1],  ds[2],     ds[3]
     ), nrow = 4, ncol = 4, byrow = T)
     dt <- as.double(curr_data$DT)
-    q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma/2*(W + diag(1,4))%*%qprev
+    q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*(W/2 + diag(1,4))%*%qprev
     q <- q/norm(q, "2")
     qprev <- q
+    prev_data <- curr_data
     ng <- Q2DCM(t(q))%*%(accel_reference)
     df$ngx[row_idx] <- ng[1]
     df$ngy[row_idx] <- ng[2]
@@ -551,7 +567,7 @@ generate_df <- function() {
   names(df) <- c('MX', 'MY', 'MZ', 'AX', 'AY', 'AZ', 'AROLL', 'APITCH', 'AYAW')
   return(df)
 }
-imu.cal.data.gyro_sada <- sada_update_df(imu.cal.data.gyro_rp_amg)
+imu.cal.data.gyro_sada <- sada_update_df(gyroacc_fusion(imu.cal.data.gyro_rp_amg, 0.5))
 #df <- generate_df()
 #imu.cal.data.gyro_sada <- sada_update_df(df)
 #SADA <- imu.cal.data.gyro_sada
@@ -562,30 +578,31 @@ SADA <- imu.cal.data.gyro_sada %>%
   mutate(GROLL = cumsum(DGROLL) + mean(sada_roll[1:3000])) %>%
   mutate(GPITCH = cumsum(DGPITCH) + mean(sada_pitch[1:3000])) %>%
   mutate(GYAW = cumsum(DGYAW) + mean(sada_yaw[1:3000])) %>%
-  select(TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, DEC, TDEC, MN, MD, w, a, b, c)
-
-df <- gyroacc_fusion(SADA, 0.01)
+  select(TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,ngx, ngy, ngz,sada_ngx, sada_ngy, sada_ngz, AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, ng_roll, ng_pitch, ng_yaw, DEC, TDEC, MN, MD, w, a, b, c)
 
 # Example of function call
 #SADA %>% mutate(u = pmap_dbl(cur_data(), ~ prova(c(...))))
 
-ylim_min <- min(SADA$sada_roll, SADA$GROLL,SADA$AROLL,SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) - 0.5
-ylim_max <- max(SADA$sada_roll, SADA$GROLL,SADA$AROLL,SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) + 0.5
+ylim_min <- min(SADA$ng_roll, SADA$sada_roll, SADA$GROLL,SADA$AROLL) - 0.5
+ylim_max <- max(SADA$ng_roll, SADA$sada_roll, SADA$GROLL,SADA$AROLL) + 0.5
 plot(SADA$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red) vs SADA_ROLL (blue)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
 lines(SADA$sada_roll, col="blue", )
 lines(SADA$GROLL, col="red")
+lines(SADA$ng_roll, col="brown")
 
-ylim_min <- min(SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) - 0.5
-ylim_max <- max(SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) + 0.5
+ylim_min <- min(SADA$ng_pitch, SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) - 0.5
+ylim_max <- max(SADA$ng_pitch, SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) + 0.5
 plot(SADA$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red) vs SADA_PITCH (blue)", ylab = "Pitch", ylim = c(ylim_min,ylim_max))
 lines(SADA$sada_pitch, col="blue", )
 lines(SADA$GPITCH, col="red")
+lines(SADA$ng_pitch, col="brown")
 
-ylim_min <- min(SADA$sada_yaw, SADA$GYAW,SADA$AYAW) - 0.5
-ylim_max <- max(SADA$sada_yaw, SADA$GYAW,SADA$AYAW) + 0.5
+ylim_min <- min(SADA$ng_yaw, SADA$sada_yaw, SADA$GYAW,SADA$AYAW) - 0.5
+ylim_max <- max(SADA$ng_yaw, SADA$sada_yaw, SADA$GYAW,SADA$AYAW) + 0.5
 plot(SADA$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red) vs SADA_YAW (blue)", ylab = "Yaw", ylim = c(ylim_min,ylim_max))
 lines(SADA$sada_yaw, col="blue", )
 lines(SADA$GYAW, col="red")
+lines(SADA$ng_yaw, col="brown")
 
 mdec<- mean(SADA$TDEC)
 vardec <- var(SADA$TDEC)

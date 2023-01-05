@@ -504,8 +504,8 @@ gyroacc_fusion <- function(df, gamma) {
     }    
     omega <- matrix(c(
       0,             -curr_data$GX,  -curr_data$GY, -curr_data$GZ,
-      curr_data$GX,   0,             curr_data$GZ,  -curr_data$GY,
-      curr_data$GY,  -curr_data$GZ,  0,             curr_data$GX,
+      curr_data$GX,   0,             -curr_data$GZ,  -curr_data$GY,
+      curr_data$GY,  curr_data$GZ,  0,             curr_data$GX,
       curr_data$GZ,  curr_data$GY,   -curr_data$GX, 0
     ), nrow = 4, ncol = 4, byrow = T)
     omega <- omega*toRad

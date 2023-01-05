@@ -352,8 +352,8 @@ for(roll in -180:180) {
 #######################################################################################
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
-#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
+#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],] %>% mutate(MY = -MY, MZ = -MZ, AY <- -AY, AZ = -AZ, GX = -GX, GY = -GY, GZ = -GZ)
 
 # plot original data
@@ -451,7 +451,7 @@ sada_update_df <- function(df) {
   for(row_idx in 1:dim(df)[1]) {
     curr_data <- df[row_idx,]
     m <- as.matrix(c(curr_data$MX, curr_data$MY,curr_data$MZ))
-    a <- as.matrix(c(curr_data$ngx, curr_data$ngy,curr_data$ngz))
+    a <- as.matrix(c(curr_data$AX, curr_data$AY,curr_data$AZ))
     m <- m/norm(m, "2")
     a <- a/norm(a, "2")
     ar <- as.matrix(c(0,0,-1))
@@ -486,9 +486,9 @@ gyroacc_fusion <- function(df, gamma) {
   for(row_idx in 1:dim(df)[1]) {
     curr_data <- df[row_idx,]
     if(is.null(qprev)) {
-      mroll <- mean(df$AROLL[1:3000])
-      mpitch <- mean(df$APITCH[1:3000])
-      myaw <- mean(df$AYAW[1:3000])
+      mroll <- mean(df$sada_roll[1:3000])
+      mpitch <- mean(df$sada_pitch[1:3000])
+      myaw <- mean(df$sada_yaw[1:3000])
       qprev <- t(DCM2Q(toBFMatrix(as.matrix(c(mroll*toRad, mpitch*toRad, myaw*toRad)))))
       prev_data <- curr_data
       q <- qprev
@@ -503,16 +503,16 @@ gyroacc_fusion <- function(df, gamma) {
       next
     }    
     omega <- matrix(c(
-      0,              -curr_data$GX, -curr_data$GY, -curr_data$GZ,
+      0,             -curr_data$GX,  -curr_data$GY, -curr_data$GZ,
       curr_data$GX,   0,             curr_data$GZ,  -curr_data$GY,
       curr_data$GY,  -curr_data$GZ,  0,             curr_data$GX,
       curr_data$GZ,  curr_data$GY,   -curr_data$GX, 0
     ), nrow = 4, ncol = 4, byrow = T)
     omega <- omega*toRad
     ds <- -as.matrix(c(
-      curr_data$AX - prev_data$AX,
-      curr_data$AY - prev_data$AY,
-      curr_data$AZ - prev_data$AZ
+      curr_data$sada_ngx,
+      curr_data$sada_ngy,
+      curr_data$sada_ngz
     ))
     W <- matrix(c(
       ds[3],    -ds[2],  -ds[1],    0,
@@ -570,10 +570,8 @@ generate_df <- function() {
   names(df) <- c('MX', 'MY', 'MZ', 'AX', 'AY', 'AZ', 'AROLL', 'APITCH', 'AYAW')
   return(df)
 }
-imu.cal.data.gyro_sada <- sada_update_df(gyroacc_fusion(imu.cal.data.gyro_rp_amg, 0.7))
-#df <- generate_df()
-#imu.cal.data.gyro_sada <- sada_update_df(df)
-#SADA <- imu.cal.data.gyro_sada
+#imu.cal.data.gyro_sada <- sada_update_df(gyroacc_fusion(imu.cal.data.gyro_rp_amg, 0.7))
+imu.cal.data.gyro_sada <- gyroacc_fusion(sada_update_df(imu.cal.data.gyro_rp_amg), 0.0)
 
 SADA <- imu.cal.data.gyro_sada %>%
   mutate(TDEC = -asin(MX*AX+MY*AY+MZ*AZ)*toDeg) %>%

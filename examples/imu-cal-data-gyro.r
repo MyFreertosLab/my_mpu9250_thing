@@ -486,7 +486,10 @@ gyroacc_fusion <- function(df, gamma) {
   for(row_idx in 1:dim(df)[1]) {
     curr_data <- df[row_idx,]
     if(is.null(qprev)) {
-      qprev <- t(DCM2Q(toBFMatrix(as.matrix(c(curr_data$AROLL*toRad, curr_data$APITCH*toRad, curr_data$AYAW*toRad)))))
+      mroll <- mean(df$AROLL[1:3000])
+      mpitch <- mean(df$APITCH[1:3000])
+      myaw <- mean(df$AYAW[1:3000])
+      qprev <- t(DCM2Q(toBFMatrix(as.matrix(c(mroll*toRad, mpitch*toRad, myaw*toRad)))))
       prev_data <- curr_data
       q <- qprev
       ng <- Q2DCM(t(q))%*%(accel_reference)

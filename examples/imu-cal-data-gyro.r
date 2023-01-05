@@ -438,14 +438,8 @@ imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV ==
   mutate(DMZ = (MZ - shift(MZ, 1, fill = MZ[1], type = "lag")))
   
 
-### Simplified Attitude Determination Algorithm
 ###############################################
-### FIXME: sostituire i calcoli di a,b,c
-### a1 <- B[1,1]-B[3,3]-1
-### a2 <- -B[2,1]^2/a1-B[1,1]-B[3,3]-1
-### a3 <- -(B[2,3]-B[2,1]*(B[1,3]+B[3,1])/a1)^2/a2-(B[1,3]+B[3,1])^2/a1+B[3,3]-B[1,1]-1
-### TODO: continuare verificando e/o correggendo:
-### mutate(Y31 = (tau+B21*Y23)/(a1*a3), Y32 = Y23/a3, Y33 = 1/a3)
+### Simplified Attitude Determination Algorithm
 ###############################################
 sada_update_df <- function(df) {
   for(row_idx in 1:dim(df)[1]) {
@@ -479,6 +473,9 @@ sada_update_df <- function(df) {
   return(df)
 }
 
+########################################
+### Gyroscope Accelerometer Fusion (GAF)
+########################################
 gyroacc_fusion <- function(df, gamma) {
   qprev = NULL
   prev_data = NULL
@@ -518,7 +515,11 @@ gyroacc_fusion <- function(df, gamma) {
     ), nrow = 4, ncol = 4, byrow = T)
     sada_quat <- as.matrix(c(curr_data$w, curr_data$a, curr_data$b, curr_data$c))
     dt <- as.double(curr_data$DT)
-    #q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*(W/2 + diag(1,4))%*%qprev
+    ####################################################################################
+    # This is the original formula, but does not works. Yaw from accelerometer is zero.
+    # q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*(W/2 + diag(1,4))%*%qprev
+    # I use sada quaternion for gyroscope fusion
+    ####################################################################################
     q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*sada_quat
     q <- q/norm(q, "2")
     qprev <- q
@@ -577,9 +578,6 @@ SADA <- imu.cal.data.gyro_sada %>%
   mutate(GPITCH = cumsum(DGPITCH) + mean(sada_pitch[1:3000])) %>%
   mutate(GYAW = cumsum(DGYAW) + mean(sada_yaw[1:3000])) %>%
   select(TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,ngx, ngy, ngz,sada_ngx, sada_ngy, sada_ngz, AROLL, APITCH, AYAW, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, ng_roll, ng_pitch, ng_yaw, DEC, TDEC, MN, MD, w, a, b, c)
-
-# Example of function call
-#SADA %>% mutate(u = pmap_dbl(cur_data(), ~ prova(c(...))))
 
 ylim_min <- min(SADA$ng_roll, SADA$sada_roll, SADA$GROLL,SADA$AROLL) - 0.5
 ylim_max <- max(SADA$ng_roll, SADA$sada_roll, SADA$GROLL,SADA$AROLL) + 0.5

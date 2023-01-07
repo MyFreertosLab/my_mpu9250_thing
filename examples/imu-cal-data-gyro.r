@@ -22,7 +22,7 @@ library(RSpincalc)
 toRad <- pi/180
 toDeg <- 1/toRad
 accel_reference <- as.matrix(c(0,0,-1))
-declination = 58.21*toRad*accel_reference[3]
+declination = -54.83*toRad*accel_reference[3]
 
 ##################################################################################################
 #### Funzioni base per matrici di rotazione
@@ -217,7 +217,7 @@ sada_quaternion <- function(B) {
 #a <- as.matrix(c(-0.77144974, -0.04735083, 0.63452597))
 
 # North, East, Down
-mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
+mr <- as.matrix(c(cos(declination), 0, sin(declination)))
 ar <- as.matrix(c(0,0,-1))
 m <- as.matrix(c(0.96361408, -0.25812689, 0.06941483))
 a <- as.matrix(c(-0.77144974, 0.04735083, -0.63452597))
@@ -254,7 +254,7 @@ Q2EA(q1,EulerOrder = "xyz")*toDeg # roll, pitch, yaw hanno segno inverso
 Q2EA(Qconj(q1),EulerOrder = "zyx")*toDeg
 
 ## Test 2 North-East-Down & Quaternions
-mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
+mr <- as.matrix(c(cos(declination), 0, sin(declination)))
 ar <- as.matrix(c(0,0,-1))
 rm <- toBFMatrix(as.matrix(c(21.4*toRad,14.38*toRad, 25.01*toRad)))
 q <- DCM2Q(t(rm))
@@ -351,8 +351,8 @@ for(roll in -180:180) {
 ### Load Data
 #######################################################################################
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
-#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
+#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
 imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],] %>% mutate(MY = -MY, MZ = -MZ, AY <- -AY, AZ = -AZ, GX = -GX, GY = -GY, GZ = -GZ)
 
@@ -452,7 +452,8 @@ sada_update_df <- function(df) {
     MD = -t(m)%*%a # negative becose accelerometer point to '-g'
     MN = sqrt(1-MD^2)
     mr <- as.matrix(c(MN, 0, MD))
-
+    #mr <- as.matrix(c(cos(declination), 0, sin(declination)))
+    
     B <- sada_B_matrix(m, a, mr, ar)
     q <- sada_quaternion(B)
     rpy <- (Q2EA.Xiao(q,EulerOrder = "xyz")*toDeg)
@@ -537,7 +538,7 @@ gyroacc_fusion <- function(df, gamma) {
 }
 
 generate_df <- function() {
-  mr <- as.matrix(c(cos(declination), 0, -sin(declination)))
+  mr <- as.matrix(c(cos(declination), 0, sin(declination)))
   ar <- as.matrix(c(0,0,-1))
   mx <- c()
   my <- c()
@@ -569,7 +570,7 @@ generate_df <- function() {
   names(df) <- c('MX', 'MY', 'MZ', 'AX', 'AY', 'AZ', 'AROLL', 'APITCH', 'AYAW')
   return(df)
 }
-imu.cal.data.gyro_sada <- gyroacc_fusion(sada_update_df(imu.cal.data.gyro_rp_amg), 0.05)
+imu.cal.data.gyro_sada <- gyroacc_fusion(sada_update_df(imu.cal.data.gyro_rp_amg), 0.01)
 
 SADA <- imu.cal.data.gyro_sada %>%
   mutate(TDEC = -asin(MX*AX+MY*AY+MZ*AZ)*toDeg) %>%
@@ -584,21 +585,21 @@ ylim_max <- max(SADA$ng_roll, SADA$sada_roll, SADA$GROLL,SADA$AROLL) + 0.5
 plot(SADA$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red) vs SADA_ROLL (blue)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
 lines(SADA$sada_roll, col="blue", )
 lines(SADA$GROLL, col="red")
-lines(SADA$ng_roll, col="brown")
+lines(SADA$ng_roll, col="green")
 
 ylim_min <- min(SADA$ng_pitch, SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) - 0.5
 ylim_max <- max(SADA$ng_pitch, SADA$sada_pitch, SADA$GPITCH,SADA$APITCH) + 0.5
 plot(SADA$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red) vs SADA_PITCH (blue)", ylab = "Pitch", ylim = c(ylim_min,ylim_max))
 lines(SADA$sada_pitch, col="blue", )
 lines(SADA$GPITCH, col="red")
-lines(SADA$ng_pitch, col="brown")
+lines(SADA$ng_pitch, col="green")
 
 ylim_min <- min(SADA$ng_yaw, SADA$sada_yaw, SADA$GYAW,SADA$AYAW) - 0.5
 ylim_max <- max(SADA$ng_yaw, SADA$sada_yaw, SADA$GYAW,SADA$AYAW) + 0.5
 plot(SADA$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red) vs SADA_YAW (blue)", ylab = "Yaw", ylim = c(ylim_min,ylim_max))
 lines(SADA$sada_yaw, col="blue", )
 lines(SADA$GYAW, col="red")
-lines(SADA$ng_yaw, col="brown")
+lines(SADA$ng_yaw, col="green")
 
 ylim_min <- min(SADA$AX, SADA$sada_ngx) - 0.5
 ylim_max <- max(SADA$AX, SADA$sada_ngx) + 0.5

@@ -14,9 +14,9 @@ library(mvmeta)
 library(data.table)
 imu.data.original <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
 # Axis North-East-Down
-imu.data.NED <- imu.data.original %>% rename(AX = AY, AY = AX,GX = GY, GY = GX) %>% mutate(AZ = -AZ, GZ = -GZ)
+imu.data.NED <- imu.data.original %>% mutate(MX2 = MY, MY = -MX, MX = MX2, AY = -AY, AZ = -AZ, GY = -GY, GZ = -GZ) %>% select(-MX2)
 
-imu.data.mag <- imu.data.NED %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
+imu.data.mag <- imu.data.NED %>% select(MX, MY, MZ, MV) %>% filter(MV == 1) %>% select(MX, MY, MZ)
 
 # plot original data
 scatter3D(imu.data.mag$MX, imu.data.mag$MY, imu.data.mag$MZ, colvar = imu.data.mag$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)

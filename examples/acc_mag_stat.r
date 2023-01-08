@@ -12,13 +12,14 @@ options(rgl.printRglwidget = TRUE)
 # mvmeta for symmetric matrix vectorization (vechMat)
 library(mvmeta)
 library(data.table)
-imu.data.mag <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
-  
-imu.data.body <- imu.data.mag %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
-imu.data.body <- imu.data.body %>% rename(MX = MY, MY = MX) %>% mutate(MZ = -MZ)
+imu.data.original <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
+# Axis North-East-Down
+imu.data.NED <- imu.data.original %>% rename(AX = AY, AY = AX,GX = GY, GY = GX) %>% mutate(AZ = -AZ, GZ = -GZ)
+
+imu.data.mag <- imu.data.NED %>% select(MY, MX, MZ, MV) %>% filter(MV == 1) %>% select(MY, MX, MZ)
 
 # plot original data
-scatter3D(imu.data.body$MX, imu.data.body$MY, imu.data.body$MZ, colvar = imu.data.body$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
+scatter3D(imu.data.mag$MX, imu.data.mag$MY, imu.data.mag$MZ, colvar = imu.data.mag$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
 plotrgl()
 rglwidget()
 
@@ -237,7 +238,7 @@ mag_estimate <- function(als, mag_data) {
   mag_model_D = diag(eigen(mag_model_Q)$values)
   mag_model_magnetic_norm = t(mag_model_b)%*%mag_model_Q%*%mag_model_b - mag_model_k 
   mag_model_alpha = -as.double(4*mag_model_magnetic_norm/(4*mag_model_k - t((t(mag_model_V)%*%mag_model_u))%*%solve(mag_model_D)%*%(t(mag_model_V)%*%mag_model_u)))
-  mag_model_B = mag_model_V %*% sqrt(mag_model_alpha*mag_model_D) %*% t(mag_model_V) # the same of sqrtm(mag_model_Q)
+  mag_model_B = mag_model_V %*% sqrt(mag_model_alpha*mag_model_D) %*% t(mag_model_V) # the same of sqrt(mag_model_Q)
   mag_model_inv_A = mag_model_B 
   mag_model_A = solve(mag_model_inv_A)
   f <- 1/sqrt(mag_model_magnetic_norm)
@@ -274,16 +275,6 @@ mag_apply_estimator <- function(mag_model) {
   return(as.data.frame(mag_data_target))
 }
 
-mag_apply_scale_factors <- function(mag_data, scale_factors) {
-  mag_data_target <- mag_data
-  # apply scale factors
-  for(i in 1:dim(mag_data)[1]) {
-    x <- t(mag_data[i,])
-    mag_data_target[i,] = scale_factors %*% x
-  }
-  return(as.data.frame(mag_data_target))
-}
-
 mag_plot_data <- function(mag_data, sphere_radius = -1, title = "") {
   scatter3D(mag_data[,1], mag_data[,2], mag_data[,3], colvar = mag_data[,3], col = NULL, add = FALSE, scale = FALSE, ticktype = "detailed", main = title)
   plotrgl()
@@ -293,9 +284,9 @@ mag_plot_data <- function(mag_data, sphere_radius = -1, title = "") {
 ######################################################################################
 # Magnetometer Estimation
 ######################################################################################
-psi_als_mag = make_psi_als(as.matrix(imu.data.body), 5.618457^2,make_index_matrix(3))
+psi_als_mag = make_psi_als(as.matrix(imu.data.mag), 5.618457^2,make_index_matrix(3))
 als_mag=estimate_all(psi_als_mag, 3)
-imu.mag.estimator <- mag_estimate(als_mag, imu.data.body)
+imu.mag.estimator <- mag_estimate(als_mag, imu.data.mag)
 imu.data.mag.estimated <- mag_apply_estimator(imu.mag.estimator)
 # remove outlier
 imu.data.mag.estimated <- imu.data.mag.estimated %>% mutate(RAD = sqrt(MX**2+MY**2+MZ**2)) 
@@ -305,7 +296,7 @@ mag_plot_data(imu.mag.estimator$data_source)
 mag_plot_data(imu.data.mag.estimated)
 sphere_radius_mag = mean(imu.data.mag.estimated$RAD)
 
-scatter3D(imu.data.body$MX-als_mag$c[1], imu.data.body$MY-als_mag$c[2], imu.data.body$MZ-als_mag$c[3], col = "green", add = FALSE, scale=FALSE)
+scatter3D(imu.data.mag$MX-als_mag$c[1], imu.data.mag$MY-als_mag$c[2], imu.data.mag$MZ-als_mag$c[3], col = "green", add = FALSE, scale=FALSE)
 scatter3D(imu.data.mag.estimated$MX*250, imu.data.mag.estimated$MY*250, imu.data.mag.estimated$MZ*250, col = "red", add = TRUE, scale=FALSE)
 plotrgl()
 rglwidget()
@@ -319,7 +310,7 @@ print(c("mag sphere radius estimated: ", sphere_radius_mag), quote = FALSE)
 print(c("mag sphere radius linear model: ", sphere_axis), quote = FALSE)
 
 
-imu.data.acc <- imu.data.mag %>% filter(MV == 1) %>% select(AX, AY, AZ)
+imu.data.acc <- imu.data.NED %>% filter(MV == 1) %>% select(AX, AY, AZ)
 
 ######################################################################################
 # Accelerometer Estimation
@@ -353,3 +344,26 @@ print(c("acc sphere radius linear model: ", sphere_axis), quote = FALSE)
 scale_factors_3 = matrix(0,3,3)
 diag(scale_factors_3) <- 1/sphere_axis
 
+###########################################################################
+### Gyroscope Bias
+###########################################################################
+gyro_bias <- as.matrix(c(
+  mean(imu.data.NED$GX),
+  mean(imu.data.NED$GY),
+  mean(imu.data.NED$GZ)
+))
+
+###########################################################################
+### Results
+###########################################################################
+print("Results: ", quote = F)
+print("  Magnetometer Matrix: ")
+print(imu.mag.estimator$scale_factors %*% imu.mag.estimator$invA)
+print("  Magnetometer Center: ")
+print(imu.mag.estimator$offset)
+print("  Accelerometer Matrix: ")
+print(imu.acc.estimator$scale_factors %*% imu.acc.estimator$invA)
+print("  Accelerometer Center: ")
+print(imu.acc.estimator$offset)
+print("  Gyroscope Bias: ")
+print(gyro_bias)

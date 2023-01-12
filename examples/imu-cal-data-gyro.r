@@ -434,6 +434,28 @@ gyro_data_means <- gyro_data %>%
 
 ts_data <- imu.cal.data.gyro_rp %>% filter(MV == 1) %>% select(TS)
 
+df_gyro <- imu.cal.data.gyro_rp %>%
+  mutate(DT = (TS - shift(TS, 1, fill = TS[1], type = "lag"))/1000) %>%
+  mutate(GX = GX/32.768, GY = GY/32.768, GZ = GZ/32.768) %>%
+  mutate(DGROLL = GX*DT,DGPITCH = GY*DT, DGYAW = GZ*DT) %>%
+  mutate(GROLL = cumsum(DGROLL) + mean(AROLL[1:3000])) %>%
+  mutate(GPITCH = cumsum(DGPITCH) + mean(APITCH[1:3000])) %>%
+  mutate(GYAW = cumsum(DGYAW) + mean(AYAW[1:3000]))
+  
+ylim_min <- min(df_gyro$GROLL,df_gyro$AROLL) - 0.5
+ylim_max <- max(df_gyro$GROLL,df_gyro$AROLL) + 0.5
+plot(df_gyro$AROLL, type="l", main = "AROLL (Black) vs GROLL (Red)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
+lines(df_gyro$GROLL, col="red", )
+
+ylim_min <- min(df_gyro$GPITCH,df_gyro$APITCH) - 0.5
+ylim_max <- max(df_gyro$GPITCH,df_gyro$APITCH) + 0.5
+plot(df_gyro$APITCH, type="l", main = "APITCH (Black) vs GPITCH (Red)", ylab = "Pitch", ylim = c(ylim_min,ylim_max))
+lines(df_gyro$GPITCH, col="red", )
+
+ylim_min <- min(df_gyro$GYAW,df_gyro$AYAW) - 0.5
+ylim_max <- max(df_gyro$GYAW,df_gyro$AYAW) + 0.5
+plot(df_gyro$AYAW, type="l", main = "AYAW (Black) vs GYAW (Red)", ylab = "Yaw", ylim = c(ylim_min,ylim_max))
+lines(df_gyro$GYAW, col="red", )
 
 imu.cal.data.gyro_rp_amg <- cbind(ts_data, imu.cal.data.gyro_rp %>% filter(MV == 1) %>% select(-GX, -GY, -GZ, -TS), gyro_data_means) %>%
   rename(GX = GX_MEAN, GY = GY_MEAN, GZ = GZ_MEAN) %>%

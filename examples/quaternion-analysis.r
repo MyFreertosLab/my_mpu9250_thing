@@ -489,6 +489,7 @@ gyroacc_fusion <- function(df, gamma) {
         df$ngz[row_idx] = ng[3]
         rpy <- Q2EA.Xiao(t(q), EulerOrder = "xyz")
         df$ng_roll[row_idx] = rpy[1]*toDeg
+        df$ng_pitch[row_idx] = rpy[2]*toDeg
         df$ng_yaw[row_idx] = rpy[3]*toDeg
         cum_dt = 0
         cum_omega = as.matrix(c(0,0,0))
@@ -520,7 +521,7 @@ gyroacc_fusion <- function(df, gamma) {
       cum_dt = 0
       ####################################################################################
       # This is the original formula, but does not works. Yaw from accelerometer is zero.
-      # q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*(W/2 + diag(1,4))%*%qprev
+      # q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*(W/2 - diag(1,4))%*%qprev
       # I use sada quaternion for gyroscope fusion
       ####################################################################################
       q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*sada_quat
@@ -557,12 +558,8 @@ gyroacc_fusion <- function(df, gamma) {
 
 gyroacc_fusion_2 <- function(df, gamma) {
   qprev = NULL
-  cum_dt = 0
-  cum_omega = as.matrix(c(0,0,0))
-  cum_items = 0
   for(row_idx in 1:dim(df)[1]) {
     curr_data <- df[row_idx,]
-    cum_dt = cum_dt+as.double(curr_data$DT)
     accel = as.matrix(c(
       curr_data$AX,
       curr_data$AY,
@@ -573,8 +570,6 @@ gyroacc_fusion_2 <- function(df, gamma) {
       curr_data$GY*toRad,
       curr_data$GZ*toRad
     ))
-    cum_omega = cum_omega + omega
-    cum_items = cum_items +1
     if(is.null(qprev)) {
       qprev <- quat_ng(accel)
       prev_data <- curr_data
@@ -587,9 +582,6 @@ gyroacc_fusion_2 <- function(df, gamma) {
       df$ng2_roll[row_idx] = rpy[1]*toDeg
       df$ng2_pitch[row_idx] = rpy[2]*toDeg
       df$ng2_yaw[row_idx] = rpy[3]*toDeg
-      cum_dt = 0
-      cum_omega = as.matrix(c(0,0,0))
-      cum_items = 0
       next
     }
     if(as.double(curr_data$MV) == 1) {
@@ -606,21 +598,22 @@ gyroacc_fusion_2 <- function(df, gamma) {
       df$ng2_pitch[row_idx] = curr_data$ng_pitch
       df$ng2_yaw[row_idx] = curr_data$ng_yaw
       qprev <- q
-      cum_dt = 0
-      cum_omega = as.matrix(c(0,0,0))
-      cum_items = 0
     } else {
-      dt <- cum_dt
-      omega = cum_omega/cum_items
-      cum_dt = 0
-      cum_omega = as.matrix(c(0,0,0))
-      cum_items = 0
+      dt <- as.double(curr_data$DT)
       dq <- quat_omegadt(omega, dt) # gyro rotation
       q <- quat_prod(qprev, dq) # apply gyro rotation
       qa_body <- quat_toquat(accel)
       qa_if <- quat_rot(q, qa_body)
       qc <- quat_prod(quat_ng(as.matrix(qa_if[2:4]), gamma = gamma), q) # correction
-      rpy <- Q2EA.Xiao(t(qc), EulerOrder = "xyz")
+      
+      rpy <- tryCatch(
+        {
+          t(as.matrix(Q2EA.Xiao(t(qc), EulerOrder = "xyz")))
+        },
+        error=function(cond){
+          t(as.matrix(Q2EA.Xiao(t(qprev), EulerOrder = "xyz")))
+        }
+      )
       qa_body_corrected <- quat_rot(quat_inv(qc), quat_toquat(accel_reference)) # recalc ax, ay, az from ng
       df$ng2x[row_idx] = qa_body_corrected[2]
       df$ng2y[row_idx] = qa_body_corrected[3]
@@ -628,6 +621,9 @@ gyroacc_fusion_2 <- function(df, gamma) {
       df$ng2_roll[row_idx] = rpy[1]*toDeg
       df$ng2_pitch[row_idx] = rpy[2]*toDeg
       df$ng2_yaw[row_idx] = rpy[3]*toDeg
+      df$ng2_roll[row_idx] = NA
+      df$ng2_pitch[row_idx] = NA
+      df$ng2_yaw[row_idx] = NA
       qprev <- qc
     }
   }
@@ -711,6 +707,7 @@ plot(df$sada_yaw, type="l", main = "SADA_YAW (Black) vs GYAW (Red) vs Fusion (Bl
 lines(df$GYAW, col="red")
 lines(df$ng_yaw, col="blue")
 lines(df$ng2_yaw, col="green")
+lines(df$MZ*100, col="blue", )
 
 ylim_min <- min(df$AX, df$sada_ngx) - 0.5
 ylim_max <- max(df$AX, df$sada_ngx) + 0.5

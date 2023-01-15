@@ -692,10 +692,10 @@ imu.cal.data.gyro_sada_gyro <-  imu.cal.data.gyro_sada %>%
   mutate(GYAW = GYAW + mean(rpy[1:3000,3])) %>%
   select(MV, TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,sada_ngx, sada_ngy, sada_ngz, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, TDEC, MN, MD, w, a, b, c)
 
-SADA <- gyroacc_fusion(imu.cal.data.gyro_sada_gyro, 0.0)
+SADA <- gyroacc_fusion(imu.cal.data.gyro_sada_gyro, 0.05)
 df <- SADA %>% filter(MV == 1)
 
-df <- gyroacc_fusion_2(SADA, 0.0) %>% filter(MV == 1)
+df <- gyroacc_fusion_2(SADA, 0.05) %>% filter(MV == 1)
 ylim_min <- min(df$sada_roll, df$GROLL) - 0.5
 ylim_max <- max(df$sada_roll, df$GROLL) + 0.5
 plot(df$sada_roll, type="l", main = "SADA_ROLL (Black) vs GROLL (Red) vs Fusion (Blue)", ylab = "Roll", ylim = c(ylim_min,ylim_max))

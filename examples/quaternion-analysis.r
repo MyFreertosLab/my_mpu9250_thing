@@ -524,9 +524,9 @@ gyroacc_fusion <- function(df, gamma) {
       # q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*(W/2 - diag(1,4))%*%qprev
       # I use sada quaternion for gyroscope fusion
       ####################################################################################
+      #q <- (1-gamma)*(quat_prod(qprev, 0.5*dt*quat_toquat(omega_mean))) + gamma*sada_quat
       q <- (1-gamma)*(dt/2*omega + diag(1, 4))%*%qprev + gamma*sada_quat
       q <- q/norm(q, "2")
-      qprev <- q
       prev_data <- curr_data
       ng <- as.matrix(quat_rot(quat_inv(q), quat_toquat(accel_reference))[2:4])
       df$qfw[row_idx] = q[1]
@@ -536,10 +536,19 @@ gyroacc_fusion <- function(df, gamma) {
       df$ngx[row_idx] = ng[1]
       df$ngy[row_idx] = ng[2]
       df$ngz[row_idx] = ng[3]
-      rpy <- Q2EA.Xiao(t(q), EulerOrder = "xyz")
+      rpy <- tryCatch(
+        {
+          t(as.matrix(Q2EA.Xiao(t(q), EulerOrder = "xyz")))
+        },
+        error=function(cond){
+          t(as.matrix(Q2EA.Xiao(t(qprev), EulerOrder = "xyz")))
+        }
+      )
+      
       df$ng_roll[row_idx] = rpy[1]*toDeg
       df$ng_pitch[row_idx] = rpy[2]*toDeg
       df$ng_yaw[row_idx] = rpy[3]*toDeg
+      qprev <- q
     } else {
       df$qfw[row_idx] = NA
       df$qfx[row_idx] = NA
@@ -633,9 +642,9 @@ gyroacc_fusion_2 <- function(df, gamma) {
 #######################################################################################
 ### Load Data
 #######################################################################################
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
+#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
-#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
 
 #imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],] %>% mutate(MY = -MY, MZ = -MZ, AY <- -AY, AZ = -AZ, GX = -GX, GY = -GY, GZ = -GZ)
@@ -667,7 +676,6 @@ mag_plot_data <- function(mag_data, sphere_radius = -1, title = "", add = FALSE,
   }
 }
   
-  
 # plot original data
 mag_plot_data(imu.cal.data.gyro.ned %>% select(MX, MY, MZ), widget = FALSE)
 mag_plot_data(imu.cal.data.gyro.ned %>% select(AX, AY, AZ), widget = TRUE, add = TRUE)
@@ -684,15 +692,17 @@ imu.cal.data.gyro_sada_gyro <-  imu.cal.data.gyro_sada %>%
   mutate(GYAW = GYAW + mean(rpy[1:3000,3])) %>%
   select(MV, TS, DT, MX, MY, MZ, AX, AY, AZ, GX, GY, GZ,sada_ngx, sada_ngy, sada_ngz, GROLL, GPITCH, GYAW, sada_roll, sada_pitch, sada_yaw, TDEC, MN, MD, w, a, b, c)
 
-SADA <- gyroacc_fusion(imu.cal.data.gyro_sada_gyro, 0.1)
+SADA <- gyroacc_fusion(imu.cal.data.gyro_sada_gyro, 0.0)
+df <- SADA %>% filter(MV == 1)
 
-df <- gyroacc_fusion_2(SADA, 0.1) %>% filter(MV == 1)
+df <- gyroacc_fusion_2(SADA, 0.0) %>% filter(MV == 1)
 ylim_min <- min(df$sada_roll, df$GROLL) - 0.5
 ylim_max <- max(df$sada_roll, df$GROLL) + 0.5
 plot(df$sada_roll, type="l", main = "SADA_ROLL (Black) vs GROLL (Red) vs Fusion (Blue)", ylab = "Roll", ylim = c(ylim_min,ylim_max))
 lines(df$GROLL, col="red")
 lines(df$ng_roll, col="blue")
 lines(df$ng2_roll, col="green")
+lines(df$MZ*6, col="red", )
 
 ylim_min <- min(df$sada_pitch, df$ng_pitch, df$sada_pitch) - 0.5
 ylim_max <- max(df$sada_pitch, df$ng_pitch, df$sada_pitch) + 0.5
@@ -764,4 +774,5 @@ ylim_min <- min(df$sada_ngz-df$ngz) - 0.5
 ylim_max <- max(df$sada_ngz-df$ngz) + 0.5
 plot(df$sada_ngz-df$ngz, type="l", main = "SADA_NGZ - NGZ",ylab = "", ylim = c(ylim_min,ylim_max))
 df1 <- df %>% mutate(NGZ_DIFF = sada_ngz - ngz )
+# df at row 8462 (SADA 45077), sada_quat ~= quat_conj(q) and theta it's 180Deg
 

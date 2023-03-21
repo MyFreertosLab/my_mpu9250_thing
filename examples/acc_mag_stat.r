@@ -18,6 +18,44 @@ imu.data.NED <- imu.data.original %>% mutate(MX2 = MY, MY = -MX, MX = MX2, AY = 
 
 imu.data.mag <- imu.data.NED %>% select(MX, MY, MZ, MV) %>% filter(MV == 1) %>% select(MX, MY, MZ)
 
+#######################################
+######## Filter Outlier of mag ########
+#######################################
+imu.data.mag.diff <- imu.data.mag %>%
+  mutate(DX = (MX - shift(MX, 1, fill = MX[1], type = "lag"))) %>%
+  mutate(DY = (MY - shift(MY, 1, fill = MY[1], type = "lag"))) %>%
+  mutate(DZ = (MZ - shift(MZ, 1, fill = MZ[1], type = "lag")))
+qx <- as.array(quantile(imu.data.mag.diff$DX))
+qy <- as.array(quantile(imu.data.mag.diff$DY))
+qz <- as.array(quantile(imu.data.mag.diff$DZ))
+minx = 2*(2.5*qx[2]-1.5*qx[4])
+maxx = 2*(2.5*qx[4]-1.5*qx[2])
+miny = 2*(2.5*qy[2]-1.5*qy[4])
+maxy = 2*(2.5*qy[4]-1.5*qy[2])
+minz = 2*(2.5*qz[2]-1.5*qz[4])
+maxz = 2*(2.5*qz[4]-1.5*qz[2])
+imu.data.mag.diff.1 <- imu.data.mag.diff %>%
+  mutate(EX = case_when(between(DX, minx,maxx) ~ 0, TRUE ~ 1)) %>%
+  mutate(EX = (EX - shift(EX, 1, fill = 0, type = "lag"))) %>%
+  mutate(EX = case_when(EX < 0 ~ 0, TRUE ~ EX)) %>%
+  mutate(EY = case_when(between(DY, miny,maxy) ~ 0, TRUE ~ 1)) %>%
+  mutate(EY = (EY - shift(EY, 1, fill = 0, type = "lag"))) %>%
+  mutate(EY = case_when(EY < 0 ~ 0, TRUE ~ EY)) %>%
+  mutate(EZ = case_when(between(DZ, minz,maxz) ~ 0, TRUE ~ 1)) %>%
+  mutate(EZ = (EZ - shift(EZ, 1, fill = 0, type = "lag"))) %>%
+  mutate(EZ = case_when(EZ < 0 ~ 0, TRUE ~ EZ))
+
+imu.data.mag.diff.1 %>% filter(EX == 1)
+imu.data.mag.diff.1 %>% filter(EY == 1)
+imu.data.mag.diff.1 %>% filter(EZ == 1)
+
+# Force previous measurement for outliers
+imu.data.mag <- imu.data.mag.diff.1 %>%
+  mutate(MX = case_when(EX == 0 ~ MX, TRUE ~ shift(MX, 1, fill = 0, type = "lag"))) %>%
+  mutate(MY = case_when(EY == 0 ~ MY, TRUE ~ shift(MY, 1, fill = 0, type = "lag"))) %>%
+  mutate(MZ = case_when(EZ == 0 ~ MZ, TRUE ~ shift(MZ, 1, fill = 0, type = "lag"))) %>%
+  select(MX, MY, MZ)  
+
 # plot original data
 scatter3D(imu.data.mag$MX, imu.data.mag$MY, imu.data.mag$MZ, colvar = imu.data.mag$MZ, col = NULL, add = FALSE, ticktype = "detailed", scale = FALSE)
 plotrgl()

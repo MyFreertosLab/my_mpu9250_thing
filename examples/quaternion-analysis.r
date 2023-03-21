@@ -643,8 +643,8 @@ gyroacc_fusion_2 <- function(df, gamma) {
 ### Load Data
 #######################################################################################
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch-360.csv')
-#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
-imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
+imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-rpy-360.csv')
+#imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-pitch.csv')
 #imu.cal.data.gyro <- read.csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-cal-data-gyro-yaw.csv')
 
 #imu.cal.data.gyro <- imu.cal.data.gyro[2:dim(imu.cal.data.gyro)[1],] %>% mutate(MY = -MY, MZ = -MZ, AY <- -AY, AZ = -AZ, GX = -GX, GY = -GY, GZ = -GZ)
@@ -702,7 +702,7 @@ plot(df$sada_roll, type="l", main = "SADA_ROLL (Black) vs GROLL (Red) vs Fusion 
 lines(df$GROLL, col="red")
 lines(df$ng_roll, col="blue")
 lines(df$ng2_roll, col="green")
-lines(df$MZ*6, col="red", )
+#lines(df$MZ*6, col="red", )
 
 ylim_min <- min(df$sada_pitch, df$ng_pitch, df$sada_pitch) - 0.5
 ylim_max <- max(df$sada_pitch, df$ng_pitch, df$sada_pitch) + 0.5
@@ -776,3 +776,17 @@ plot(df$sada_ngz-df$ngz, type="l", main = "SADA_NGZ - NGZ",ylab = "", ylim = c(y
 df1 <- df %>% mutate(NGZ_DIFF = sada_ngz - ngz )
 # df at row 8462 (SADA 45077), sada_quat ~= quat_conj(q) and theta it's 180Deg
 
+N = 30000
+fft.ay_noise <- fft(imu.cal.data.gyro.ned$AY[1:N])
+x = 0:(N-1)
+plot(Mod(fft.ay_noise), type='l', main='Raw serie - fft spectrum', ylim = c(0,1))
+plot(fft.ay_noise, main='fft ay')
+mean(Mod(fft.ay_noise))
+
+inx_filter = 128
+FDfilter = rep(1, N)
+FDfilter[inx_filter:(N-inx_filter)] = 0
+fft.ay_noise_filtered = FDfilter * fft.ay_noise
+
+plot(x, imu.cal.data.gyro.ned$AY[1:N], type='l', main='original noise')
+lines(x, y=Re( fft( fft.ay_noise_filtered, inverse=TRUE) / N ) , col='red')

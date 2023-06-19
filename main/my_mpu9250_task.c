@@ -29,7 +29,7 @@
 #include <mpu9250_baro.h>
 
 static const char *MY_MPU9250_TAG = "my_mpu9250";
-#define HOST_IP "192.168.1.64"
+#define HOST_IP "192.168.1.60"
 #define HOST_PORT 65432
 #define BUFF_LEN 128
 

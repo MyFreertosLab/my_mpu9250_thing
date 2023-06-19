@@ -149,7 +149,7 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 
 	char buff[BUFF_LEN];
     while(true) {
-    	while(true) {
+    	while(true) { // TCP connection
     	    char host_ip[] = HOST_IP;
     	    int addr_family = AF_INET;
     	    int ip_protocol = IPPROTO_IP;
@@ -175,7 +175,6 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     		}
     	    ESP_LOGI(MY_MPU9250_TAG, "Successfully connected");
 
-    	    // read/send cycle
     		uint32_t counter = 0;
 #ifdef CONFIG_ESP_DATA_CAL
     		mpu9250_cal_message_t data_message;
@@ -188,12 +187,12 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 #endif
 			printf("sizeof data: %d\n", data_size);
 			printf("sizeof float: %d\n", sizeof(float));
-    		while (true) {
+    		while (true) { // read/send cycle
         		memset(&data_message, 0, data_size);
     			counter++;
+   				counter %= 100;
     			if( ulTaskNotifyTake( pdTRUE,xMaxBlockTime ) == 1) {
-    				counter %= 100;
-    				ESP_ERROR_CHECK(mpu9250_load_data(mpu9250_handle));
+     				ESP_ERROR_CHECK(mpu9250_load_data(mpu9250_handle));
     				if(counter == 0) {
 #ifdef CONFIG_ESP_DATA_CAL
     					printf("Gyro .: [%d][%d][%d]\n", mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_z);

@@ -21,6 +21,7 @@
 #include <nvs.h>
 #include <driver/spi_master.h>
 #include <driver/gpio.h>
+#include <mqtt_client.h>
 
 #include <my_mpu9250_task.h>
 #include <mpu9250_accel.h>
@@ -28,7 +29,7 @@
 #include <mpu9250_mag.h>
 #include <mpu9250_baro.h>
 
-static const char *MY_MPU9250_TAG = "my_mpu9250";
+static const char *TAG = "my_mpu9250";
 #define HOST_IP "192.168.1.60"
 #define HOST_PORT 65432
 #define BUFF_LEN 128
@@ -57,6 +58,46 @@ typedef struct {
 	uint8_t mag_drdy;
 	uint16_t frequenzy_hz;
 } mpu9250_config_data_t;
+
+
+static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
+{
+    esp_mqtt_client_handle_t client = event->client;
+    int msg_id;
+
+    switch (event->event_id) {
+        case MQTT_EVENT_CONNECTED:
+            ESP_LOGI(TAG, "Connesso al broker MQTT");
+            msg_id = esp_mqtt_client_subscribe(client, "/imu/calibration/commands", 0);
+            ESP_LOGI(TAG, "Sottoscrizione al topic esempio, msg_id=%d", msg_id);
+            break;
+
+        case MQTT_EVENT_DISCONNECTED:
+            ESP_LOGI(TAG, "Disconnesso dal broker MQTT");
+            break;
+
+        case MQTT_EVENT_DATA:
+            ESP_LOGI(TAG, "Dati ricevuti sul topic %.*s : %.*s",
+                     event->topic_len, event->topic, event->data_len, event->data);
+
+            break;
+
+        default:
+            break;
+    }
+    return ESP_OK;
+}
+
+void mqtt_app_start(void)
+{
+    esp_mqtt_client_config_t mqtt_cfg = {
+        .uri = "192.168.1.60", // Indirizzo del broker MQTT
+        .event_handle = mqtt_event_handler_cb,
+    };
+
+    esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    esp_mqtt_client_start(client);
+}
 
 esp_err_t my_mpu9250_init_flash(){
     esp_err_t err = nvs_flash_init();
@@ -122,7 +163,7 @@ static esp_err_t mpu9250_send_message(int sock, char* data, char* buff, uint8_t 
 			data_len+tag_start_len+tag_end_len, 0);
 
 	if (err < 0) {
-		ESP_LOGE(MY_MPU9250_TAG,
+		ESP_LOGE(TAG,
 				"Error occurred during sending: errno %d", errno);
 		return ESP_FAIL;
 	}
@@ -162,20 +203,20 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 
     		sock = socket(addr_family, SOCK_STREAM, ip_protocol);
     		if (sock < 0) {
-    			ESP_LOGE(MY_MPU9250_TAG, "Unable to create socket: errno %d",
+    			ESP_LOGE(TAG, "Unable to create socket: errno %d",
     					errno);
     			break;
     		}
-    	    ESP_LOGI(MY_MPU9250_TAG, "Socket created, connecting to %s:%d", host_ip, HOST_PORT);
+    	    ESP_LOGI(TAG, "Socket created, connecting to %s:%d", host_ip, HOST_PORT);
 
     		int err = connect(sock, (struct sockaddr*) &dest_addr,
     				sizeof(dest_addr));
     		if (err != 0) {
-    			ESP_LOGE(MY_MPU9250_TAG, "Socket unable to connect: errno %d",
+    			ESP_LOGE(TAG, "Socket unable to connect: errno %d",
     					errno);
     			break;
     		}
-    	    ESP_LOGI(MY_MPU9250_TAG, "Successfully connected");
+    	    ESP_LOGI(TAG, "Successfully connected");
 
     		uint32_t counter = 0;
 #ifdef CONFIG_ESP_DATA_CAL
@@ -236,7 +277,7 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     	}
 
         if (sock != -1) {
-            ESP_LOGE(MY_MPU9250_TAG, "Shutting down socket and restarting...");
+            ESP_LOGE(TAG, "Shutting down socket and restarting...");
             shutdown(sock, 0);
             close(sock);
         }
@@ -245,7 +286,8 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 }
 
 void my_mpu9250_task(void *arg) {
-	const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 500 );
+    // Avvia MQTT client
+    mqtt_app_start();
 
 	// MPU9250 Handle
 	mpu9250_init_t mpu9250;

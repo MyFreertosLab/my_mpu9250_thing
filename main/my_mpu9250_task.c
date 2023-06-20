@@ -129,6 +129,8 @@ static esp_err_t mpu9250_send_message(int sock, char* data, char* buff, uint8_t 
 	return ESP_OK;
 }
 
+uint8_t my_mpu9250_activate_send_message = 1;
+
 void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 	const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 500 );
 
@@ -203,25 +205,32 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     					printf("Accel : [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.accel_data_x, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_y, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_z);
     					printf("Mag ..: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.mag_data_x, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_y, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_z);
 #endif
-        				esp_err_t res = mpu9250_send_message(sock, (char*)&config_data, buff, sizeof(mpu9250_config_data_t), MY_MPU9250_SENSORS_MSG_CONFIG_START, MY_MPU9250_SENSORS_MSG_CONFIG_END);
+    					if(my_mpu9250_activate_send_message) {
+            				esp_err_t res = mpu9250_send_message(sock, (char*)&config_data, buff, sizeof(mpu9250_config_data_t), MY_MPU9250_SENSORS_MSG_CONFIG_START, MY_MPU9250_SENSORS_MSG_CONFIG_END);
+            				if(res != ESP_OK) {
+            					break;
+            				}
+    					}
+
+    				}
+    				if(my_mpu9250_activate_send_message) {
+        				// copy data to send
+        				memcpy((char*)&data_message.data, data_pointer, data_size);
+        				data_message.mag_data_drdy = mpu9250_handle->data.mag.drdy;
+        				data_message.timestamp = mpu9250_handle->data.timestamp;
+        				esp_err_t res = mpu9250_send_message(sock, (char*)&data_message, buff, data_size, MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
         				if(res != ESP_OK) {
         					break;
         				}
     				}
-    				// copy data to send
-    				memcpy((char*)&data_message.data, data_pointer, data_size);
-    				data_message.mag_data_drdy = mpu9250_handle->data.mag.drdy;
-    				data_message.timestamp = mpu9250_handle->data.timestamp;
-    				esp_err_t res = mpu9250_send_message(sock, (char*)&data_message, buff, data_size, MY_MPU9250_SENSORS_MSG_RAW_DATA_START, MY_MPU9250_SENSORS_MSG_RAW_DATA_END);
-    				if(res != ESP_OK) {
-    					break;
-    				}
+
     		    } else {
     		    	ESP_ERROR_CHECK(mpu9250_test_connection(mpu9250_handle));
     				if(counter == 0) {
     			    	printf("SORRY!! Interrupt LOST!\n");
     				}
     		    }
+
     		}
     		break;
     	}
@@ -246,11 +255,5 @@ void my_mpu9250_task(void *arg) {
 	// Init MPU9250
 	ESP_ERROR_CHECK(mpu9250_init(mpu9250_handle));
 
-	// load circular buffer
-	for(uint8_t i = 0; i < CIRCULAR_BUFFER_SIZE; i++) {
-		if( ulTaskNotifyTake( pdTRUE,xMaxBlockTime ) == 1) {
-			ESP_ERROR_CHECK(mpu9250_load_raw_data(mpu9250_handle));
-		}
-	}
 	my_mpu9250_read_data_cycle(mpu9250_handle);
 }

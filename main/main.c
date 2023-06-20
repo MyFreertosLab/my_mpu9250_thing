@@ -2,12 +2,11 @@
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "esp_event.h"
-#include "esp_event_loop.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
 #include "my_mpu9250_task.h"
 
-static const char *TAG = "my_wsclient_thing";
+static const char *TAG = "my_mpu9250_thing_main";
 
 
 esp_err_t event_handler(void *ctx, system_event_t *event)

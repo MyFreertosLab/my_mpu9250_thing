@@ -59,7 +59,7 @@ typedef struct {
 	uint16_t frequenzy_hz;
 } mpu9250_config_data_t;
 
-static uint8_t my_mpu9250_activate_send_message = 1;
+static uint8_t my_mpu9250_activate_send_message = 0;
 
 static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {

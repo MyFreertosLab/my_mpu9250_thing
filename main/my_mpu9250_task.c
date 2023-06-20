@@ -59,6 +59,7 @@ typedef struct {
 	uint16_t frequenzy_hz;
 } mpu9250_config_data_t;
 
+static uint8_t my_mpu9250_activate_send_message = 1;
 
 static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {
@@ -79,7 +80,11 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "Dati ricevuti sul topic %.*s : %.*s",
                      event->topic_len, event->topic, event->data_len, event->data);
-
+            if (strncmp(event->data, "start", strlen("start")) == 0) {
+            	my_mpu9250_activate_send_message = 1;
+            } else if (strncmp(event->data, "stop", strlen("stop")) == 0)  {
+            	my_mpu9250_activate_send_message = 0;
+            }
             break;
 
         default:
@@ -91,7 +96,7 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .uri = "192.168.1.60", // Indirizzo del broker MQTT
+        .uri = "mqtt://192.168.1.60:1883", // Indirizzo del broker MQTT
         .event_handle = mqtt_event_handler_cb,
     };
 
@@ -169,8 +174,6 @@ static esp_err_t mpu9250_send_message(int sock, char* data, char* buff, uint8_t 
 	}
 	return ESP_OK;
 }
-
-uint8_t my_mpu9250_activate_send_message = 1;
 
 void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
 	const TickType_t xMaxBlockTime = pdMS_TO_TICKS( 500 );

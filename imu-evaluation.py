@@ -61,7 +61,17 @@ for colonna, media in media_colonne.items():
     median = median_colonne[colonna]
     distribution = distribution_colonne[colonna]
     print(f"{colonna}: Media={media}, Varianza={varianza}, Mediana={median}, Distribution={distribution}")
-    plt.hist(valori_colonne[colonna], bins='auto', alpha=0.7)
+    plt.hist(valori_colonne[colonna], bins='auto', alpha=0.7, density=True)
+    xmin, xmax = plt.xlim()
+    print("xmin, xmax: ", xmin, xmax)
+    xlen = len(valori_colonne[colonna])
+    # Genera un array di valori x per la curva della distribuzione normale
+    x = np.linspace(xmin, xmax, xlen)
+    # Calcola i valori della funzione di densità di probabilità della distribuzione normale
+    pdf = stats.norm.pdf(x, loc=media, scale=np.sqrt(varianza))
+    # Traccia la curva della distribuzione normale
+    plt.plot(x, pdf, 'r', label='Distribuzione Normale')
+
 
     # Aggiunta delle linee verticali per i parametri
     plt.axvline(media, color='r', linestyle='dashed', linewidth=2, label='Media')

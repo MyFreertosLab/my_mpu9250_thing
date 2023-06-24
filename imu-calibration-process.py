@@ -9,6 +9,8 @@ import numpy as np
 import csv
 from numpy import dtype
 import paho.mqtt.client as mqtt
+from scipy import stats
+
 
 raw_data_queue = Queue()
 end_queue = Queue(maxsize=1)
@@ -112,6 +114,68 @@ def read_records(sock, out_queue, end_queue, num_records):
 def on_connect(client, userdata, flags, rc):
     print("Connesso al broker MQTT con codice di risultato: " + str(rc))
 
+# Lettura files csv
+def leggi_dati_da_csv(file_path, delimiter=','):
+    dati = []
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file, delimiter=delimiter)
+        for riga in reader:
+            dati.append([float(valore) for valore in riga])
+    return dati
+
+#def calcola_media_varianza_colonne(dati):
+#    num_colonne = len(dati[0])
+#    media_colonne = []
+#    varianza_colonne = []
+#    
+#    for colonna in range(num_colonne):
+#        valori_colonna = [riga[colonna] for riga in dati]
+#        media_colonna = statistics.mean(valori_colonna)
+#        varianza_colonna = statistics.variance(valori_colonna)
+#        
+#        media_colonne.append(media_colonna)
+#        varianza_colonne.append(varianza_colonna)
+#    
+#    return media_colonne, varianza_colonne
+
+def calcola_media_varianza_colonne(dati):
+    media_colonne = {}
+    varianza_colonne = {}
+    median_colonne = {}
+    distribution_colonne = {}
+    valori_colonne = {}
+
+    colonne_speciali = ['MX', 'MY', 'MZ']
+    colonne_normali = [colonna for colonna in dati[0].keys() if colonna not in colonne_speciali]
+
+    for colonna in colonne_normali:
+        valori_colonna = [riga[colonna] for riga in dati]
+        media_colonna = np.mean(valori_colonna)
+        varianza_colonna = np.var(valori_colonna)
+        median_colonna = np.median(valori_colonna)
+        distribution_colonna = stats.describe(valori_colonna)
+
+        media_colonne[colonna] = media_colonna
+        varianza_colonne[colonna] = varianza_colonna
+        median_colonne[colonna] = median_colonna
+        distribution_colonne[colonna] = distribution_colonna
+        valori_colonne[colonna] = valori_colonna
+
+    for colonna in colonne_speciali:
+        valori_colonna = [riga[colonna] for riga in dati if riga['MV'] == 1]
+        media_colonna = np.mean(valori_colonna)
+        varianza_colonna = np.var(valori_colonna)
+        median_colonna = np.median(valori_colonna)
+        distribution_colonna = stats.describe(valori_colonna)
+
+        media_colonne[colonna] = media_colonna
+        varianza_colonne[colonna] = varianza_colonna
+        median_colonne[colonna] = median_colonna
+        distribution_colonne[colonna] = distribution_colonna
+        valori_colonne[colonna] = valori_colonna
+
+    return media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne
+
 
 if __name__ == "__main__":
 
@@ -201,12 +265,23 @@ if __name__ == "__main__":
 #########         dal primo set di dati
 #################################################################################
 ## TODO: Utilizzare script R
+file_csv = "examples/01-imu-raw-data.csv"
+dati = leggi_dati_da_csv(file_csv)
+media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne = calcola_media_varianza_colonne(dati)
+
+print("Media per ogni colonna:")
+for i, media in enumerate(media_colonne):
+    print(f"Colonna {i+1}: {media}")
+
+print("\nVarianza per ogni colonna:")
+for i, varianza in enumerate(varianza_colonne):
+    print(f"Colonna {i+1}: {varianza}")
 
 #################################################################################
 ######### Fase 4: Calcolo offset e matrici di correzione 
 #########         dal secondo set di dati utilizzando media, varianza e std
 #################################################################################
-## TODO: Utilizare script R
+## TODO: Utilizzare script R
 
 #################################################################################
 ######### Fase 5: Invio offset e matrici di correzione al sensore

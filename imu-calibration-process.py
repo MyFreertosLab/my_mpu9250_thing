@@ -264,7 +264,6 @@ if __name__ == "__main__":
 ######### Fase 3: Calcolo media, varianza e deviazione standard 
 #########         dal primo set di dati
 #################################################################################
-## TODO: Utilizzare script R
 file_csv = "examples/01-imu-raw-data.csv"
 dati = leggi_dati_da_csv(file_csv)
 media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne = calcola_media_varianza_colonne(dati)

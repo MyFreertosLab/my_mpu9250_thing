@@ -3,6 +3,10 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 
 def leggi_dati_da_csv(file_path):
     dati = []
@@ -50,39 +54,9 @@ def calcola_media_varianza_colonne(dati):
     
     return media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne
 
-def generate_curve(data):
-  # Calcola l'istogramma
-  hist, bin_edges = np.histogram(data, bins='auto', density=True)
-
-  # Calcola il centro di ogni intervallo di bin
-  bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-  print("bin_centers", bin_centers)
-
-  # Normalizza le frequenze
-  hist_norm = hist / np.sum(hist)
-
-  # Definisci la funzione di densità di probabilità della distribuzione normale
-  def norm_pdf(x, mu, sigma):
-      return stats.norm.pdf(x, loc=mu, scale=sigma)
-
-  # Stimazione dei parametri utilizzando la regressione dei minimi quadrati
-  params, _ = curve_fit(norm_pdf, bin_centers, hist_norm, method='lm')
-
-  # Estrai i parametri stimati
-  mu_estimato = params[0]
-  sigma_estimato = params[1]
-
-  # Genera la curva della distribuzione normale prevista
-  x = np.linspace(min(bin_centers), max(bin_centers), len(data))
-  y_pred = norm_pdf(x, mu_estimato, sigma_estimato)
-  return x, y_pred,mu_estimato,sigma_estimato
-
-
 file_csv = "examples/01-imu-raw-data.csv"
 dati = leggi_dati_da_csv(file_csv)
 media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne = calcola_media_varianza_colonne(dati)
-
-print("valori[AZ]: ", valori_colonne["AZ"])
 
 #print("Media e varianza delle colonne:")
 for colonna, media in media_colonne.items():
@@ -90,9 +64,7 @@ for colonna, media in media_colonne.items():
     median = median_colonne[colonna]
     distribution = distribution_colonne[colonna]
     print(f"{colonna}: Media={media}, Varianza={varianza}, Mediana={median}, Distribution={distribution}")
-#    x, y,mu_estimato,sigma_estimato = generate_curve(valori_colonne[colonna])
     plt.hist(valori_colonne[colonna], bins='auto', alpha=0.7, density=True)
-#    plt.plot(x, y, 'r-', label='Distribuzione Normale')
 
     xmin, xmax = plt.xlim()
     print("xmin, xmax: ", xmin, xmax)
@@ -123,4 +95,277 @@ for colonna, media in media_colonne.items():
 
     # Mostra il grafico
     plt.show()
+
+###############################
+## Step 1): Form Tensor T 5xnxm
+###############################
+def t0(x, variance):
+  return 1
+def t1(x, variance):
+  return x
+def t2(x, variance):
+  return x**2 - variance
+def t3(x, variance):
+  return x**3 - 3*x*variance
+def t4(x, variance):
+  return  x**4 - 6* (x**2) *variance + 3*(variance**2)
+def terror(x, variance):
+  assert false, "k must be in range(1:6)"
+def T(k, i, l, X, variance):
+  switch_cases = {
+    1: t0,
+    2: t1,
+    3: t2,
+    4: t3,
+    5: t4
+  }
+  return switch_cases.get(k+1, terror)(X[l,i], variance)
+
+###############################
+## Step 2): Define index matrix
+###############################
+IM = np.array([[1,1],[1,2],[1,3],[2,2],[2,3],[3,3],[1,0],[2,0],[3,0],[0,0]])
+
+#####################################
+## Step 3): Form Tensor R 
+#####################################
+def is_equal(v1, v2):
+    if v1 == v2:
+        return 1
+    else:
+        return 0
+def R(p,q,i, M):
+  return is_equal(M[p,0], i) + is_equal(M[p,1], i)  + is_equal(M[q,0], i)  + is_equal(M[q,1], i) 
+
+#####################################
+## Step 4): Compute ni_als
+#####################################
+def ni_als(p,q,X,variance,M):
+   m = X.shape[0]
+   n = X.shape[1]
+   s = 0
+   for l in range(m):
+     f = 1
+     for i in range(n):
+       f = f*T(R(p,q,i+1,M),i,l,X,variance)
+     s = s + f
+   return s
+
+#####################################
+## Step 5): Define index off-diagonal
+#####################################
+def index_off_diagonal(n=3):
+  # only for n=3
+  return np.array([1,2,4])
+
+
+#####################################
+## Step 6): form matrix psi_als
+#####################################
+def make_psi_als(X,variance,M):
+  n = X.shape[1]
+  n1 = M.shape[0]
+  D = index_off_diagonal(n)
+  psi_als = np.zeros((n1, n1)) 
+  for p in range(n1):
+    for q in range(p,n1):
+      if p in D and q in D :
+        psi_als[p,q] = 4*ni_als(p,q,X,variance, M)
+      else:
+        if p not in D and q not in D:
+          psi_als[p,q] = ni_als(p,q,X,variance, M)
+        else:
+          psi_als[p,q] = 2*ni_als(p,q,X,variance, M)
+      psi_als[q,p] = psi_als[p,q]
+  return psi_als
+
+################################################
+## Step 7)8): Find eigenvector of min eigenvalue
+################################################
+def calc_eigenvector_psi_als(psi_als):
+    eigen_als = np.linalg.eig(psi_als)
+    eigen_values = eigen_als[0]
+    eigen_vectors = eigen_als[1]
+    idx = np.argmin(np.abs(eigen_values))
+    beta = np.matrix(eigen_vectors[:, idx])
+    result = beta / np.linalg.norm(beta, ord=2)
+    return result
+
+#def calc_eigenvector_psi_als(psi_als):
+#  eigen_values, eigen_vectors = np.linalg.eig(psi_als)
+#  idx = np.argmin(np.abs(eigen_values))
+#  beta = np.delete(eigen_vectors, idx, axis=1)
+#  result = beta/np.linalg.norm(beta)
+#  return result
+
+################################################
+## Step 9): Estimate A, b, c, d
+################################################
+def estimate_A(beta, n):
+    print("beta: ", beta, "n ", n)
+    expanded_beta = beta[:(n*(n+1)//2)]
+    print("expandend beta: ", expanded_beta)
+    expanded_matrix = np.zeros((n, n))
+
+    idx = 0
+    for i in range(n):
+        for j in range(i, n):
+            expanded_matrix[i, j] = expanded_beta[0,idx]
+            expanded_matrix[j, i] = expanded_beta[0,idx]
+            idx += 1
+
+    return expanded_matrix
+
+def estimate_b(beta, n):
+    start_index = int(n*(n+1)/2)
+    end_index = beta.shape[1] - 1
+    result=beta[0,start_index:end_index]
+    return np.transpose(result)
+
+def estimate_d(beta, n):
+    return beta[0,-1]
+
+def estimate_c(A, b, n):
+    print("A: ", A)
+    print("b: ", b)
+    c = -0.5 * np.linalg.solve(A, b)
+    print("c: ", c)
+    return c
+
+def estimate_Ae(A, c, d):
+    denominator = np.dot(np.dot(np.transpose(c), A), c) - d
+    scaling_factor = 1.0 / denominator
+    print("A: ", A)
+    print("c: ", c)
+    print("d: ", d)
+    print("scaling_factor: ", scaling_factor)
+    Ae = scaling_factor.item() * A
+    return Ae
+
+def to_definite_positive_factor(A):
+    eigenvalues = np.linalg.eigvals(A)
+    result = 0
+    print("eigenvalues A: ", eigenvalues)
+    if np.prod(eigenvalues >= 0) == 1:
+        result = 1
+    elif np.prod(eigenvalues < 0) == 1:
+        result = -1
+
+    return result
+
+def estimate_all(psi_als, n):
+    beta = calc_eigenvector_psi_als(psi_als)
+    A = estimate_A(beta, n)
+    print("A: ", A) 
+    # forza la matrice ad essere definita positiva se è negativa
+    factor = to_definite_positive_factor(A)
+    print("factor: ", factor)
+    assert factor != 0, "La matrice non può essere indefinita"
+    A = factor * A
+    
+    b = factor * estimate_b(beta, n)
+    d = factor * estimate_d(beta, n)
+    c = estimate_c(A, b, n)
+    Ae = estimate_Ae(A, c, d)
+    
+    als = {}
+    als['A'] = A
+    als['b'] = b
+    als['d'] = d
+    als['c'] = c
+    als['Ae'] = Ae
+    
+    return als
+
+def mag_estimate(als, mag_data):
+    mag_model_Q = als['A']
+    mag_model_u = als['b']
+    mag_model_k = als['d']
+    mag_model_b = -0.5 * np.linalg.solve(mag_model_Q, mag_model_u)
+    
+    # Verifica il risultato
+    eigen_result = np.linalg.eig(mag_model_Q)
+    D = np.diag(eigen_result[0])
+    V = eigen_result[1]
+    TA = np.dot(np.dot(V, D), np.transpose(V))
+    assert np.allclose(mag_model_Q, TA, atol=1e-15), "Verifica fallita: mag_model_Q non corrisponde a TA"
+    TD = np.dot(np.dot(np.transpose(V), mag_model_Q), V)
+    assert np.allclose(D, TD, atol=1e-15), "Verifica fallita: D non corrisponde a TD"
+    
+    # Radice quadrata matrice Q
+    appo = np.dot(mag_model_Q, np.transpose(mag_model_Q))
+    appo_eigen = np.linalg.eig(appo)
+    mag_model_V = appo_eigen[1]
+    mag_model_D = np.diag(appo_eigen[0])
+    mag_model_magnetic_norm = np.dot(np.dot(np.transpose(mag_model_b), mag_model_Q), mag_model_b) - mag_model_k
+    mag_model_alpha = -4 * mag_model_magnetic_norm / (4 * mag_model_k - np.dot(np.dot(np.transpose(mag_model_V), mag_model_u), np.linalg.solve(mag_model_D, np.dot(np.transpose(mag_model_V), mag_model_u))))
+    mag_model_B = np.dot(np.dot(mag_model_V, np.sqrt(np.dot(np.dot(mag_model_alpha, mag_model_D)))) , np.transpose(mag_model_V))
+    mag_model_inv_A = mag_model_B
+    mag_model_A = np.linalg.inv(mag_model_inv_A)
+    f = 1 / np.sqrt(mag_model_magnetic_norm)
+    mag_model_scale_factors = np.zeros((3, 3))
+    np.fill_diagonal(mag_model_scale_factors, f)
+  
+    result = {}
+    result['Q'] = mag_model_Q
+    result['b'] = mag_model_b
+    result['k'] = mag_model_k
+    result['offset'] = mag_model_b
+    result['V'] = mag_model_V
+    result['D'] = mag_model_D
+    result['B'] = mag_model_B
+    result['Hm2'] = mag_model_magnetic_norm
+    result['alpha'] = mag_model_alpha
+    result['invA'] = mag_model_inv_A
+    result['data_source'] = mag_data
+    result['scale_factors'] = mag_model_scale_factors
+    result['als'] = als
+    
+    return result
+
+def mag_apply_estimator(mag_model):
+    mag_data = mag_model['data_source']
+    mag_model_inv_A = mag_model['invA']
+    mag_model_b = mag_model['b']
+    mag_data_target = mag_data.copy()
+    
+    # Applica il modello ai dati
+    for i in range(mag_data.shape[0]):
+        x = np.transpose(mag_data.iloc[i, :]) - np.transpose(mag_model_b)
+        mag_data_target.iloc[i, :] = np.dot(mag_model['scale_factors'], np.dot(mag_model_inv_A, x))
+    
+    return pd.DataFrame(mag_data_target)
+
+def mag_plot_data(mag_data, sphere_radius=-1, title=""):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(mag_data.iloc[:, 0], mag_data.iloc[:, 1], mag_data.iloc[:, 2], c=mag_data.iloc[:, 2], cmap=None)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title(title)
+    plt.show()
+
+imu_data_original = pd.read_csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
+print(imu_data_original['MY'])
+# Axis North-East-Down
+imu_data_NED = imu_data_original.rename(columns={'MX': 'MX2', 'MY': 'MX'})
+imu_data_NED = imu_data_NED.rename(columns={'MX2': 'MY'})
+print("imu_data_NED.columns", imu_data_NED.columns)
+
+imu_data_NED['MY'] = -imu_data_NED['MY']
+imu_data_NED['MX'] = -imu_data_NED['MX']
+imu_data_NED['AY'] = -imu_data_NED['AY']
+imu_data_NED['AZ'] = -imu_data_NED['AZ']
+imu_data_NED['GY'] = -imu_data_NED['GY']
+imu_data_NED['GZ'] = -imu_data_NED['GZ']
+
+imu_data_mag = imu_data_NED[['MX', 'MY', 'MZ']].loc[imu_data_NED['MV'] == 1]
+print("imu_data_mag.columns: ", imu_data_mag.columns)
+
+psi_als_mag = make_psi_als(np.matrix(imu_data_mag), (5.618457 ** 2), IM)
+print("psi_als_mag: ", psi_als_mag)
+als_mag = estimate_all(psi_als_mag, 3)
+imu_mag_estimator = mag_estimate(als_mag, imu_data_mag)
+imu_data_mag_estimated = mag_apply_estimator(imu_mag_estimator)
 

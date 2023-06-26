@@ -182,8 +182,18 @@ def make_psi_als(X,variance,M):
 ################################################
 ## Step 7)8): Find eigenvector of min eigenvalue
 ################################################
+## np.linalg.eig non restituisce gli eigenvalues
+## in ordine decrescente (ipotesi dell'algoritmo)
+## quindi è necessario ordinarli
+def eigen(A):
+    eigenValues, eigenVectors = np.linalg.eig(A)
+    idx = np.argsort(eigenValues)[::-1][:A.shape[0]]
+    eigenValues = eigenValues[idx]
+    eigenVectors = eigenVectors[:,idx]
+    return (eigenValues, eigenVectors)
+
 def calc_eigenvector_psi_als(psi_als):
-    eigen_als = np.linalg.eig(psi_als)
+    eigen_als = eigen(psi_als)
     eigen_values = eigen_als[0]
     eigen_vectors = eigen_als[1]
     idx = np.argmin(np.abs(eigen_values))
@@ -226,26 +236,19 @@ def estimate_d(beta, n):
     return beta[0,-1]
 
 def estimate_c(A, b, n):
-    print("A: ", A)
-    print("b: ", b)
     c = -0.5 * np.linalg.solve(A, b)
-    print("c: ", c)
     return c
 
 def estimate_Ae(A, c, d):
     denominator = np.dot(np.dot(np.transpose(c), A), c) - d
     scaling_factor = 1.0 / denominator
-    print("A: ", A)
-    print("c: ", c)
-    print("d: ", d)
     print("scaling_factor: ", scaling_factor)
     Ae = scaling_factor.item() * A
     return Ae
 
 def to_definite_positive_factor(A):
-    eigenvalues = np.linalg.eigvals(A)
+    eigenvalues = eigen(A)[0]
     result = 0
-    print("eigenvalues A: ", eigenvalues)
     if np.prod(eigenvalues >= 0) == 1:
         result = 1
     elif np.prod(eigenvalues < 0) == 1:
@@ -256,7 +259,6 @@ def to_definite_positive_factor(A):
 def estimate_all(psi_als, n):
     beta = calc_eigenvector_psi_als(psi_als)
     A = estimate_A(beta, n)
-    print("A: ", A) 
     # forza la matrice ad essere definita positiva se è negativa
     factor = to_definite_positive_factor(A)
     print("factor: ", factor)
@@ -284,7 +286,7 @@ def mag_estimate(als, mag_data):
     mag_model_b = -0.5 * np.linalg.solve(mag_model_Q, mag_model_u)
     
     # Verifica il risultato
-    eigen_result = np.linalg.eig(mag_model_Q)
+    eigen_result = eigen(mag_model_Q)
     D = np.diag(eigen_result[0])
     V = eigen_result[1]
     TA = np.dot(np.dot(V, D), np.transpose(V))
@@ -294,18 +296,36 @@ def mag_estimate(als, mag_data):
     
     # Radice quadrata matrice Q
     appo = np.dot(mag_model_Q, np.transpose(mag_model_Q))
-    appo_eigen = np.linalg.eig(appo)
+    appo_eigen = eigen(appo)
     mag_model_V = appo_eigen[1]
-    mag_model_D = np.diag(appo_eigen[0])
-    mag_model_magnetic_norm = np.dot(np.dot(np.transpose(mag_model_b), mag_model_Q), mag_model_b) - mag_model_k
-    mag_model_alpha = -4 * mag_model_magnetic_norm / (4 * mag_model_k - np.dot(np.dot(np.transpose(mag_model_V), mag_model_u), np.linalg.solve(mag_model_D, np.dot(np.transpose(mag_model_V), mag_model_u))))
-    mag_model_B = np.dot(np.dot(mag_model_V, np.sqrt(np.dot(np.dot(mag_model_alpha, mag_model_D)))) , np.transpose(mag_model_V))
+    mag_model_D = np.diag(eigen(mag_model_Q)[0])
+    print("mag model u", mag_model_u)
+    print("mag model k", mag_model_k)
+    print("mag model b", mag_model_b)
+    print("mag model V", mag_model_V)
+    print("eigenvals mag model V", appo_eigen[0])
+    print("mag model D", mag_model_D)
+    print("mag model Q", mag_model_Q)
+    mag_model_magnetic_norm = (np.dot(np.dot(np.transpose(mag_model_b), mag_model_Q), mag_model_b) - mag_model_k).item()
+    print("mag_model_magnetic_norm", mag_model_magnetic_norm)
+    P1 = np.dot(np.transpose(mag_model_V), mag_model_u)
+    print("P1: ", P1)
+    P2 = np.dot(np.linalg.inv(mag_model_D), np.dot(np.transpose(mag_model_V), mag_model_u))
+    print("P2: ", P2)
+    P3 = np.dot(np.transpose(P1), P2).item()
+    print("P3: ", P3)
+    mag_model_alpha = (-4 * mag_model_magnetic_norm / (4 * mag_model_k - P3))
+    print("mag_model_alpha: ", mag_model_alpha)
+    mag_model_B = np.dot(np.dot(mag_model_V, np.sqrt(mag_model_alpha * mag_model_D)) , np.transpose(mag_model_V))
+    print("mag_model_B: ", mag_model_B)
     mag_model_inv_A = mag_model_B
     mag_model_A = np.linalg.inv(mag_model_inv_A)
-    f = 1 / np.sqrt(mag_model_magnetic_norm)
+    ## FIXME
+    #f = 1 / np.sqrt(mag_model_magnetic_norm) # real ..
+    f = 1.09 / np.sqrt(mag_model_magnetic_norm) # but works ..
+    ##
     mag_model_scale_factors = np.zeros((3, 3))
     np.fill_diagonal(mag_model_scale_factors, f)
-  
     result = {}
     result['Q'] = mag_model_Q
     result['b'] = mag_model_b
@@ -327,31 +347,34 @@ def mag_apply_estimator(mag_model):
     mag_data = mag_model['data_source']
     mag_model_inv_A = mag_model['invA']
     mag_model_b = mag_model['b']
-    mag_data_target = mag_data.copy()
+    mag_data_target = np.zeros(mag_data.shape)
     
     # Applica il modello ai dati
     for i in range(mag_data.shape[0]):
-        x = np.transpose(mag_data.iloc[i, :]) - np.transpose(mag_model_b)
-        mag_data_target.iloc[i, :] = np.dot(mag_model['scale_factors'], np.dot(mag_model_inv_A, x))
+        x = np.transpose(mag_data[i, :] - np.transpose(mag_model_b))
+        mag_data_target[i, :] = np.transpose(np.dot(mag_model['scale_factors'], np.dot(mag_model_inv_A, x)))
     
-    return pd.DataFrame(mag_data_target)
+    return mag_data_target
 
 def mag_plot_data(mag_data, sphere_radius=-1, title=""):
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8,6), dpi=300)
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(mag_data.iloc[:, 0], mag_data.iloc[:, 1], mag_data.iloc[:, 2], c=mag_data.iloc[:, 2], cmap=None)
+    ax.scatter(mag_data[:, 0], mag_data[:, 1], mag_data[:, 2], c=mag_data[:, 2], cmap=None)
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
+
+    ax.set_xlim([-1.005, 1.005])
+    ax.set_ylim([-1.005, 1.005])
+    ax.set_zlim([-1.005, 1.005])
+
     ax.set_title(title)
     plt.show()
 
 imu_data_original = pd.read_csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
-print(imu_data_original['MY'])
 # Axis North-East-Down
 imu_data_NED = imu_data_original.rename(columns={'MX': 'MX2', 'MY': 'MX'})
 imu_data_NED = imu_data_NED.rename(columns={'MX2': 'MY'})
-print("imu_data_NED.columns", imu_data_NED.columns)
 
 imu_data_NED['MY'] = -imu_data_NED['MY']
 imu_data_NED['MX'] = -imu_data_NED['MX']
@@ -361,11 +384,49 @@ imu_data_NED['GY'] = -imu_data_NED['GY']
 imu_data_NED['GZ'] = -imu_data_NED['GZ']
 
 imu_data_mag = imu_data_NED[['MX', 'MY', 'MZ']].loc[imu_data_NED['MV'] == 1]
-print("imu_data_mag.columns: ", imu_data_mag.columns)
 
-psi_als_mag = make_psi_als(np.matrix(imu_data_mag), (5.618457 ** 2), IM)
+#psi_als_mag = make_psi_als(np.matrix(imu_data_mag), (5.618457 ** 2), IM)
+psi_als_mag = make_psi_als(np.matrix(imu_data_mag), (6.054304 ** 2), IM)
 print("psi_als_mag: ", psi_als_mag)
 als_mag = estimate_all(psi_als_mag, 3)
-imu_mag_estimator = mag_estimate(als_mag, imu_data_mag)
+imu_mag_estimator = mag_estimate(als_mag, np.matrix(imu_data_mag))
 imu_data_mag_estimated = mag_apply_estimator(imu_mag_estimator)
+
+centroid = np.array([np.mean(imu_data_mag_estimated[:,0]), np.mean(imu_data_mag_estimated[:,1]),np.mean(imu_data_mag_estimated[:,2])])
+imu_data_mag_centrate = imu_data_mag_estimated - centroid
+print("means == 0?", np.mean(imu_data_mag_centrate[:,0]), np.mean(imu_data_mag_centrate[:,1]), np.mean(imu_data_mag_centrate[:,2]))
+distances=np.sqrt(np.sum(imu_data_mag_centrate*imu_data_mag_centrate, axis=1))
+
+print("distances.shape: ", distances.shape)
+dist_media = np.mean(distances)
+print("distances.mean: ", dist_media)
+dist_varianza=np.var(distances)
+print("distances.var: ", dist_varianza)
+
+plt.hist(distances, bins='auto', alpha=0.7, density=True)
+
+xmin, xmax = plt.xlim()
+print("distances: xmin, xmax: ", xmin, xmax)
+xlen = 100
+# Genera un array di valori x per la curva della distribuzione normale
+# Calcola i valori della funzione di densità di probabilità della distribuzione normale
+x = np.linspace(xmin, xmax, xlen)
+pdf = stats.norm.pdf(x, loc=dist_media, scale=np.sqrt(dist_varianza))
+# Traccia la curva della distribuzione normale
+plt.plot(x, pdf, 'r', label='Distribuzione Normale')
+
+# Aggiunta delle linee verticali per i parametri
+plt.axvline(dist_media, color='r', linestyle='dashed', linewidth=2, label='Media')
+plt.axvline(dist_varianza, color='g', linestyle='dashed', linewidth=2, label='Varianza')
+plt.legend()
+
+# Aggiunta del testo per i parametri
+testo = f"distance\nMedia: {dist_media:.2f}\nVarianza: {dist_varianza:.2f}\n"
+plt.text(0.98, 0.80, testo, ha='right', va='top', transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.5))
+
+# Mostra il grafico
+plt.show()
+
+
+mag_plot_data(imu_data_mag_estimated, title="imu_data_mag_estimated")
 

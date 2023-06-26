@@ -320,12 +320,20 @@ def mag_estimate(als, mag_data):
     print("mag_model_B: ", mag_model_B)
     mag_model_inv_A = mag_model_B
     mag_model_A = np.linalg.inv(mag_model_inv_A)
-    ## FIXME
+    ## START FIXME
     #f = 1 / np.sqrt(mag_model_magnetic_norm) # real ..
     f = 1.09 / np.sqrt(mag_model_magnetic_norm) # but works ..
     ##
     mag_model_scale_factors = np.zeros((3, 3))
     np.fill_diagonal(mag_model_scale_factors, f)
+    ## provo a calcolare i factor in altro modo
+    eigen_Q = eigen(mag_model_Q)
+    factors=2*np.sqrt(1/eigen_Q[0])
+    factors=factors/np.linalg.norm(factors, ord=2)
+    print("factors: ", factors)
+    mag_model_scale_factors = np.diag(factors)
+    ##
+    ## END FIXME
     result = {}
     result['Q'] = mag_model_Q
     result['b'] = mag_model_b
@@ -402,6 +410,27 @@ dist_media = np.mean(distances)
 print("distances.mean: ", dist_media)
 dist_varianza=np.var(distances)
 print("distances.var: ", dist_varianza)
+
+##################################
+#### Sacle Factors Correction ####
+#### recalc all               ####
+##################################
+imu_mag_estimator['scale_factors'] = imu_mag_estimator['scale_factors']/dist_media
+print("factors: ", np.diagonal(imu_mag_estimator['scale_factors']))
+imu_data_mag_estimated = mag_apply_estimator(imu_mag_estimator)
+
+centroid = np.array([np.mean(imu_data_mag_estimated[:,0]), np.mean(imu_data_mag_estimated[:,1]),np.mean(imu_data_mag_estimated[:,2])])
+imu_data_mag_centrate = imu_data_mag_estimated - centroid
+print("means == 0?", np.mean(imu_data_mag_centrate[:,0]), np.mean(imu_data_mag_centrate[:,1]), np.mean(imu_data_mag_centrate[:,2]))
+distances=np.sqrt(np.sum(imu_data_mag_centrate*imu_data_mag_centrate, axis=1))
+
+print("distances.shape: ", distances.shape)
+dist_media = np.mean(distances)
+print("distances.mean: ", dist_media)
+dist_varianza=np.var(distances)
+print("distances.var: ", dist_varianza)
+ 
+
 
 plt.hist(distances, bins='auto', alpha=0.7, density=True)
 

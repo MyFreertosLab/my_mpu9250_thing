@@ -323,12 +323,11 @@ def mag_estimate(als, mag_data):
     ## START FIXME
     #f = 1 / np.sqrt(mag_model_magnetic_norm) # real ..
     f = 1.09 / np.sqrt(mag_model_magnetic_norm) # but works ..
-    ##
     mag_model_scale_factors = np.zeros((3, 3))
     np.fill_diagonal(mag_model_scale_factors, f)
     ## provo a calcolare i factor in altro modo
     eigen_Q = eigen(mag_model_Q)
-    factors=2*np.sqrt(1/eigen_Q[0])
+    factors=np.sqrt(1/eigen_Q[0])
     factors=factors/np.linalg.norm(factors, ord=2)
     print("factors: ", factors)
     mag_model_scale_factors = np.diag(factors)
@@ -360,7 +359,7 @@ def mag_apply_estimator(mag_model):
     # Applica il modello ai dati
     for i in range(mag_data.shape[0]):
         x = np.transpose(mag_data[i, :] - np.transpose(mag_model_b))
-        mag_data_target[i, :] = np.transpose(np.dot(mag_model['scale_factors'], np.dot(mag_model_inv_A, x)))
+        mag_data_target[i, :] = np.transpose(np.dot(mag_model_inv_A, np.dot(mag_model['scale_factors'], x)))
     
     return mag_data_target
 
@@ -429,8 +428,6 @@ dist_media = np.mean(distances)
 print("distances.mean: ", dist_media)
 dist_varianza=np.var(distances)
 print("distances.var: ", dist_varianza)
- 
-
 
 plt.hist(distances, bins='auto', alpha=0.7, density=True)
 
@@ -458,4 +455,11 @@ plt.show()
 
 
 mag_plot_data(imu_data_mag_estimated, title="imu_data_mag_estimated")
+
+print("Results:")
+print("Offset: ", imu_mag_estimator['offset'])
+print("Matrix: ", imu_mag_estimator['invA'])
+print("Scale Factors: ", imu_mag_estimator['scale_factors'])
+print("Scaled Matrix: ", np.dot(imu_mag_estimator['invA'], imu_mag_estimator['scale_factors']))
+print("eigen(Scaled Matrix)", eigen(np.dot(imu_mag_estimator['invA'], imu_mag_estimator['scale_factors'])))
 

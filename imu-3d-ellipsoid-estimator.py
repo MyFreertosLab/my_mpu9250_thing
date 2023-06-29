@@ -42,6 +42,8 @@ class Imu3dEllipsoidEstimator:
      self.als = self.estimate_all()
      self.model = self.mag_estimate()
      estimated_data = self.mag_apply_estimator()
+
+     # scale factors correction ...
      distances=np.sqrt(np.sum(estimated_data*estimated_data, axis=1))
      dist_media = np.mean(distances)
      self.model['scale_factors'] = self.model['scale_factors']/dist_media

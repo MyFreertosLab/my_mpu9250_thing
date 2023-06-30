@@ -320,14 +320,51 @@ def imu_3d_ellipsoid_estimator_example():
    imu_data_NED['GY'] = -imu_data_NED['GY']
    imu_data_NED['GZ'] = -imu_data_NED['GZ']
    
-   imu_data_mag = imu_data_NED[['MX', 'MY', 'MZ']].loc[imu_data_NED['MV'] == 1]
-   
+   imu_data_mag = np.array(imu_data_NED[['MX', 'MY', 'MZ']].loc[imu_data_NED['MV'] == 1])
+
+   centroid = np.array([np.mean(imu_data_mag[:,0]), np.mean(imu_data_mag[:,1]),np.mean(imu_data_mag[:,2])])
+   imu_data_mag_centered = imu_data_mag - centroid
+   print("post: means == 0?", np.mean(imu_data_mag_centered[:,0]), np.mean(imu_data_mag_centered[:,1]), np.mean(imu_data_mag_centered[:,2]))
+
+   distances=np.sqrt(np.sum(imu_data_mag_centered*imu_data_mag_centered, axis=1))
+
+   print("raw distances.shape: ", distances.shape)
+   dist_media = np.mean(distances)
+   print("raw distances.mean: ", dist_media)
+   dist_varianza=np.var(distances)
+   print("raw distances.var: ", dist_varianza)
+   raw_std = dist_varianza ** (1/3)
+   raw_std -= raw_std * 7.9 / 100.0
+   plt.hist(distances, bins='auto', alpha=0.7, density=True)
+
+   xmin, xmax = plt.xlim()
+   print("distances: xmin, xmax: ", xmin, xmax)
+   xlen = 100
+   # Genera un array di valori x per la curva della distribuzione normale
+   # Calcola i valori della funzione di densità di probabilità della distribuzione normale
+   x = np.linspace(xmin, xmax, xlen)
+   pdf = stats.norm.pdf(x, loc=dist_media, scale=np.sqrt(dist_varianza))
+   # Traccia la curva della distribuzione normale
+   plt.plot(x, pdf, 'r', label='Distribuzione Normale')
+
+   # Aggiunta delle linee verticali per i parametri
+   plt.axvline(dist_media, color='r', linestyle='dashed', linewidth=2, label='Media')
+   plt.legend()
+
+   # Aggiunta del testo per i parametri
+   testo = f"distance\nMedia: {dist_media:.2f}\nVarianza: {dist_varianza:.2f}\n"
+   plt.text(0.98, 0.80, testo, ha='right', va='top', transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.5))
+
+   # Mostra il grafico
+   plt.show()
+
    ##################################################
    ### Estimation
    ##################################################
    #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (6.054304 ** 2))
    #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.054304 ** 2))
-   estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.025304 ** 2))
+   #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.025304 ** 2))
+   estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (raw_std ** 2))
    imu_data_mag_estimated = estimator.estimated_data
    distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
    

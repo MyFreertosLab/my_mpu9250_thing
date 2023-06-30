@@ -280,7 +280,28 @@ for i, varianza in enumerate(varianza_colonne):
 ######### Fase 4: Calcolo offset e matrici di correzione 
 #########         dal secondo set di dati utilizzando media, varianza e std
 #################################################################################
-## TODO: Utilizzare script R
+## Magnetometer
+file_csv = "examples/02-imu-raw-data.csv"
+dati = leggi_dati_da_csv(file_csv)
+dati_mag = np.array(dati[['MX', 'MY', 'MZ']].loc[dati['MV'] == 1])
+
+## Calcolo approssimativamente la deviazione standard del raggio
+centroid = np.array([np.mean(dati_mag[:,0]), np.mean(dati_mag[:,1]),np.mean(dati_mag[:,2])])
+dati_mag_centered = dati_mag - centroid
+distances=np.sqrt(np.sum(dati_mag_centered*dati_mag_centered, axis=1))
+dist_media = np.mean(distances)
+dist_varianza=np.var(distances)
+radius_std = dist_varianza ** (1/3)
+radius_std -= radius_std*7.9÷100
+
+estimator = Imu3dEllipsoidEstimator(dati_mag, (radius_std ** 2))
+imu_data_mag_estimated = estimator.estimated_data
+distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
+print("distances.shape: ", distances.shape)
+dist_media = np.mean(distances)
+print("distances.mean: ", dist_media)
+dist_varianza=np.var(distances)
+print("distances.var: ", dist_varianza)
 
 #################################################################################
 ######### Fase 5: Invio offset e matrici di correzione al sensore

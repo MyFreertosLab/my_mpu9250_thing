@@ -47,7 +47,8 @@ class Imu3dEllipsoidEstimator:
      distances=np.sqrt(np.sum(estimated_data*estimated_data, axis=1))
      dist_media = np.mean(distances)
      self.model['scale_factors'] = self.model['scale_factors']/dist_media
-     self.estimated_data = self.mag_apply_estimator()
+     estimated_data = self.mag_apply_estimator()
+     self.estimated_data = estimated_data
 
    ###############################
    ## Form Tensor T 5xnxm
@@ -325,7 +326,8 @@ def imu_3d_ellipsoid_estimator_example():
    ### Estimation
    ##################################################
    #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (6.054304 ** 2))
-   estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (8.054304 ** 2))
+   #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.054304 ** 2))
+   estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.025304 ** 2))
    imu_data_mag_estimated = estimator.estimated_data
    distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
    
@@ -416,4 +418,4 @@ def imu_3d_ellipsoid_estimator_example():
    print("Scaled Matrix: ", np.dot(estimator.model['invA'], estimator.model['scale_factors']))
    print("eigen(Scaled Matrix)", eigen(np.dot(estimator.model['invA'], estimator.model['scale_factors'])))
    
-imu_3d_ellipsoid_estimator_example()
+#imu_3d_ellipsoid_estimator_example()

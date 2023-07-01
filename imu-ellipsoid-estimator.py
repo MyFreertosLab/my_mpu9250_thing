@@ -30,7 +30,7 @@ def eigen(A):
    return (eigenValues, eigenVectors)
    
 
-class Imu3dEllipsoidEstimator:
+class ImuEllipsoidEstimator:
    def __init__(self, dati, variance):
      # Data
      self.dati = dati
@@ -304,106 +304,105 @@ class Imu3dEllipsoidEstimator:
        return result
    
 
-def imu_3d_ellipsoid_estimator_example():
-   ##################################################
-   ### Data Preparation
-   ##################################################
-   imu_data_original = pd.read_csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
-   # Axis North-East-Down
-   imu_data_NED = imu_data_original.rename(columns={'MX': 'MX2', 'MY': 'MX'})
-   imu_data_NED = imu_data_NED.rename(columns={'MX2': 'MY'})
+def imu_ellipsoid_estimator_example():
+   def prepare_data():
+     ##################################################
+     ### Data Preparation
+     ##################################################
+     imu_data_original = pd.read_csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
+     # Axis North-East-Down
+     imu_data_NED = imu_data_original.rename(columns={'MX': 'MX2', 'MY': 'MX'})
+     imu_data_NED = imu_data_NED.rename(columns={'MX2': 'MY'})
    
-   imu_data_NED['MY'] = -imu_data_NED['MY']
-   imu_data_NED['MX'] = -imu_data_NED['MX']
-   imu_data_NED['AY'] = -imu_data_NED['AY']
-   imu_data_NED['AZ'] = -imu_data_NED['AZ']
-   imu_data_NED['GY'] = -imu_data_NED['GY']
-   imu_data_NED['GZ'] = -imu_data_NED['GZ']
+     imu_data_NED['MY'] = -imu_data_NED['MY']
+     imu_data_NED['MX'] = -imu_data_NED['MX']
+     imu_data_NED['AY'] = -imu_data_NED['AY']
+     imu_data_NED['AZ'] = -imu_data_NED['AZ']
+     imu_data_NED['GY'] = -imu_data_NED['GY']
+     imu_data_NED['GZ'] = -imu_data_NED['GZ']
+     return imu_data_NED   
+
+   def estimate_ellipsoid(imu_data_mag):
+     centroid = np.array([np.mean(imu_data_mag[:,0]), np.mean(imu_data_mag[:,1]),np.mean(imu_data_mag[:,2])])
+     imu_data_mag_centered = imu_data_mag - centroid
+     print("post: means == 0?", np.mean(imu_data_mag_centered[:,0]), np.mean(imu_data_mag_centered[:,1]), np.mean(imu_data_mag_centered[:,2]))
+
+     distances=np.sqrt(np.sum(imu_data_mag_centered*imu_data_mag_centered, axis=1))
+
+     print("raw distances.shape: ", distances.shape)
+     dist_media = np.mean(distances)
+     print("raw distances.mean: ", dist_media)
+     dist_varianza=np.var(distances)
+     print("raw distances.var: ", dist_varianza)
+     raw_std = dist_varianza ** (1/3)
+     raw_std -= raw_std * 7.9 / 100.0
+     plt.hist(distances, bins='auto', alpha=0.7, density=True)
+
+     xmin, xmax = plt.xlim()
+     print("distances: xmin, xmax: ", xmin, xmax)
+     xlen = 100
+     # Genera un array di valori x per la curva della distribuzione normale
+     # Calcola i valori della funzione di densità di probabilità della distribuzione normale
+     x = np.linspace(xmin, xmax, xlen)
+     pdf = stats.norm.pdf(x, loc=dist_media, scale=np.sqrt(dist_varianza))
+     # Traccia la curva della distribuzione normale
+     plt.plot(x, pdf, 'r', label='Distribuzione Normale')
+  
+     # Aggiunta delle linee verticali per i parametri
+     plt.axvline(dist_media, color='r', linestyle='dashed', linewidth=2, label='Media')
+     plt.legend()
+
+     # Aggiunta del testo per i parametri
+     testo = f"distance\nMedia: {dist_media:.2f}\nVarianza: {dist_varianza:.2f}\n"
+     plt.text(0.98, 0.80, testo, ha='right', va='top', transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.5))
+
+     # Mostra il grafico
+     plt.show()
+
+     ##################################################
+     ### Estimation
+     ##################################################
+     #estimator = ImuEllipsoidEstimator(np.matrix(imu_data_mag), (6.054304 ** 2))
+     #estimator = ImuEllipsoidEstimator(np.matrix(imu_data_mag), (11.054304 ** 2))
+     #estimator = ImuEllipsoidEstimator(np.matrix(imu_data_mag), (11.025304 ** 2))
+     estimator = ImuEllipsoidEstimator(np.matrix(imu_data_mag), (raw_std ** 2))
+     imu_data_mag_estimated = estimator.estimated_data
+     distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
    
-   imu_data_mag = np.array(imu_data_NED[['MX', 'MY', 'MZ']].loc[imu_data_NED['MV'] == 1])
+     print("distances.shape: ", distances.shape)
+     dist_media = np.mean(distances)
+     print("distances.mean: ", dist_media)
+     dist_varianza=np.var(distances)
+     print("distances.var: ", dist_varianza)
 
-   centroid = np.array([np.mean(imu_data_mag[:,0]), np.mean(imu_data_mag[:,1]),np.mean(imu_data_mag[:,2])])
-   imu_data_mag_centered = imu_data_mag - centroid
-   print("post: means == 0?", np.mean(imu_data_mag_centered[:,0]), np.mean(imu_data_mag_centered[:,1]), np.mean(imu_data_mag_centered[:,2]))
+     plt.hist(distances, bins='auto', alpha=0.7, density=True)
 
-   distances=np.sqrt(np.sum(imu_data_mag_centered*imu_data_mag_centered, axis=1))
+     xmin, xmax = plt.xlim()
+     print("distances: xmin, xmax: ", xmin, xmax)
+     xlen = 100
+     # Genera un array di valori x per la curva della distribuzione normale
+     # Calcola i valori della funzione di densità di probabilità della distribuzione normale
+     x = np.linspace(xmin, xmax, xlen)
+     pdf = stats.norm.pdf(x, loc=dist_media, scale=np.sqrt(dist_varianza))
+     # Traccia la curva della distribuzione normale
+     plt.plot(x, pdf, 'r', label='Distribuzione Normale')
 
-   print("raw distances.shape: ", distances.shape)
-   dist_media = np.mean(distances)
-   print("raw distances.mean: ", dist_media)
-   dist_varianza=np.var(distances)
-   print("raw distances.var: ", dist_varianza)
-   raw_std = dist_varianza ** (1/3)
-   raw_std -= raw_std * 7.9 / 100.0
-   plt.hist(distances, bins='auto', alpha=0.7, density=True)
+     # Aggiunta delle linee verticali per i parametri
+     plt.axvline(dist_media, color='r', linestyle='dashed', linewidth=2, label='Media')
+     plt.axvline(dist_varianza, color='g', linestyle='dashed', linewidth=2, label='Varianza')
+     plt.legend()
 
-   xmin, xmax = plt.xlim()
-   print("distances: xmin, xmax: ", xmin, xmax)
-   xlen = 100
-   # Genera un array di valori x per la curva della distribuzione normale
-   # Calcola i valori della funzione di densità di probabilità della distribuzione normale
-   x = np.linspace(xmin, xmax, xlen)
-   pdf = stats.norm.pdf(x, loc=dist_media, scale=np.sqrt(dist_varianza))
-   # Traccia la curva della distribuzione normale
-   plt.plot(x, pdf, 'r', label='Distribuzione Normale')
+     # Aggiunta del testo per i parametri
+     testo = f"distance\nMedia: {dist_media:.2f}\nVarianza: {dist_varianza:.2f}\n"
+     plt.text(0.98, 0.80, testo, ha='right', va='top', transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.5))
 
-   # Aggiunta delle linee verticali per i parametri
-   plt.axvline(dist_media, color='r', linestyle='dashed', linewidth=2, label='Media')
-   plt.legend()
+     # Mostra il grafico
+     plt.show()
 
-   # Aggiunta del testo per i parametri
-   testo = f"distance\nMedia: {dist_media:.2f}\nVarianza: {dist_varianza:.2f}\n"
-   plt.text(0.98, 0.80, testo, ha='right', va='top', transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.5))
-
-   # Mostra il grafico
-   plt.show()
-
-   ##################################################
-   ### Estimation
-   ##################################################
-   #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (6.054304 ** 2))
-   #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.054304 ** 2))
-   #estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (11.025304 ** 2))
-   estimator = Imu3dEllipsoidEstimator(np.matrix(imu_data_mag), (raw_std ** 2))
-   imu_data_mag_estimated = estimator.estimated_data
-   distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
-   
-   print("distances.shape: ", distances.shape)
-   dist_media = np.mean(distances)
-   print("distances.mean: ", dist_media)
-   dist_varianza=np.var(distances)
-   print("distances.var: ", dist_varianza)
-
-   plt.hist(distances, bins='auto', alpha=0.7, density=True)
-
-   xmin, xmax = plt.xlim()
-   print("distances: xmin, xmax: ", xmin, xmax)
-   xlen = 100
-   # Genera un array di valori x per la curva della distribuzione normale
-   # Calcola i valori della funzione di densità di probabilità della distribuzione normale
-   x = np.linspace(xmin, xmax, xlen)
-   pdf = stats.norm.pdf(x, loc=dist_media, scale=np.sqrt(dist_varianza))
-   # Traccia la curva della distribuzione normale
-   plt.plot(x, pdf, 'r', label='Distribuzione Normale')
-
-   # Aggiunta delle linee verticali per i parametri
-   plt.axvline(dist_media, color='r', linestyle='dashed', linewidth=2, label='Media')
-   plt.axvline(dist_varianza, color='g', linestyle='dashed', linewidth=2, label='Varianza')
-   plt.legend()
-
-   # Aggiunta del testo per i parametri
-   testo = f"distance\nMedia: {dist_media:.2f}\nVarianza: {dist_varianza:.2f}\n"
-   plt.text(0.98, 0.80, testo, ha='right', va='top', transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.5))
-
-   # Mostra il grafico
-   plt.show()
-
-   
-   
-   ##################################################
-   ### Plot
-   ##################################################
-   def mag_plot_data(mag_data, sphere_radius=-1, title=""):
+     ##################################################
+     ### Plot
+     ##################################################
+     def mag_plot_data(mag_data, sphere_radius=-1, title=""):
        # Genera le coordinate (x, y, z) per la sfera di raggio 1
        theta = np.linspace(0, 2 * np.pi, 100)
        phi = np.linspace(0, np.pi, 100)
@@ -430,29 +429,36 @@ def imu_3d_ellipsoid_estimator_example():
        # Imposta la scala degli assi in modo da essere uniforme
        plt.show()
 
-#   def mag_plot_data(mag_data, sphere_radius=-1, title=""):
-#       fig = plt.figure(figsize=(8,6), dpi=300)
-#       ax = fig.add_subplot(111, projection='3d')
-#       ax.scatter(mag_data[:, 0], mag_data[:, 1], mag_data[:, 2], c=mag_data[:, 2], cmap=None)
-#       ax.set_xlabel('X')
-#       ax.set_ylabel('Y')
-#       ax.set_zlabel('Z')
-#   
-#       ax.set_xlim([-1.005, 1.005])
-#       ax.set_ylim([-1.005, 1.005])
-#       ax.set_zlim([-1.005, 1.005])
-#   
-#       ax.set_title(title)
-#       plt.show()
+  #   def mag_plot_data(mag_data, sphere_radius=-1, title=""):
+  #       fig = plt.figure(figsize=(8,6), dpi=300)
+  #       ax = fig.add_subplot(111, projection='3d')
+  #       ax.scatter(mag_data[:, 0], mag_data[:, 1], mag_data[:, 2], c=mag_data[:, 2], cmap=None)
+  #       ax.set_xlabel('X')
+  #       ax.set_ylabel('Y')
+  #       ax.set_zlabel('Z')
+  #   
+  #       ax.set_xlim([-1.005, 1.005])
+  #       ax.set_ylim([-1.005, 1.005])
+  #       ax.set_zlim([-1.005, 1.005])
+  #   
+  #       ax.set_title(title)
+  #       plt.show()
    
    
-   mag_plot_data(imu_data_mag_estimated, title="imu_data_mag_estimated")
+     mag_plot_data(imu_data_mag_estimated, title="imu_data_mag_estimated")
    
-   print("Results:")
-   print("Offset: ", estimator.model['offset'])
-   print("Matrix: ", estimator.model['invA'])
-   print("Scale Factors: ", estimator.model['scale_factors'])
-   print("Scaled Matrix: ", np.dot(estimator.model['invA'], estimator.model['scale_factors']))
-   print("eigen(Scaled Matrix)", eigen(np.dot(estimator.model['invA'], estimator.model['scale_factors'])))
+     print("Results:")
+     print("Offset: ", estimator.model['offset'])
+     print("Matrix: ", estimator.model['invA'])
+     print("Scale Factors: ", estimator.model['scale_factors'])
+     print("Scaled Matrix: ", np.dot(estimator.model['invA'], estimator.model['scale_factors']))
+     print("eigen(Scaled Matrix)", eigen(np.dot(estimator.model['invA'], estimator.model['scale_factors'])))
+     return estimator
+
+   df = prepare_data()
+   imu_data_mag = np.array(df[['MX', 'MY', 'MZ']].loc[df['MV'] == 1])
+   mag_estimator = estimate_ellipsoid(imu_data_mag)
+   imu_data_acc = np.array(df[['AX', 'AY', 'AZ']])
+   acc_estimator = estimate_ellipsoid(imu_data_acc)
    
-#imu_3d_ellipsoid_estimator_example()
+#imu_ellipsoid_estimator_example()

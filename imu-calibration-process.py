@@ -10,7 +10,9 @@ import csv
 from numpy import dtype
 import paho.mqtt.client as mqtt
 from scipy import stats
-
+import pandas as pd
+import imuEllipsoidEstimator as iee
+from imuEllipsoidEstimator import estimate_mag_acc
 
 raw_data_queue = Queue()
 end_queue = Queue(maxsize=1)
@@ -179,198 +181,140 @@ def calcola_media_varianza_colonne(dati):
 
 if __name__ == "__main__":
 
-    # Crea un'istanza del client MQTT
-    client = mqtt.Client()
+#    # Crea un'istanza del client MQTT
+#    client = mqtt.Client()
+#
+#    # Imposta le funzioni di callback
+#    client.on_connect = on_connect
+# 
+#    # Specifica l'indirizzo IP del broker MQTT
+#    broker_address = "localhost"
+#
+#    # Connettiti al broker MQTT
+#    client.connect(broker_address, 1883, 60)
+#
+#    # Avvia il loop del client MQTT
+#    client.loop_start()
+#
+#    # Creazione del socket TCP per il server
+#    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#
+#    # Configurazione del socket
+#    server_address = ('192.168.1.60', 65432)  # IP del server (vuoto per accettare connessioni da qualsiasi interfaccia di rete), porta del server
+#    server_socket.bind(server_address)
+#    server_socket.listen(1)  # Limita il numero massimo di connessioni pendenti
+#
+#    print("Server in ascolto su {}:{}".format(*server_address))
+#
+#    print("In attesa di connessioni...")
+#    client_socket, client_address = server_socket.accept()  # Accetta la connessione del client
+#    print("Connessione accettata da {}:{}".format(*client_address))
+#
+##################################################################################
+########## Fase 1: produco dati con sensore fermo
+##################################################################################
+#    print("please do not move the sensor ...")
+#    # Due thread, uno scrive su file e l'altro legge dal socket
+#    rd = threading.Thread(target=raw_data_renderer_function, args=("examples/01-imu-raw-data.csv",raw_data_queue))
+#    rd.start()
+#    sr = threading.Thread(target=read_records, args=(client_socket,raw_data_queue, end_queue, 20000 ))
+#    # avvio la produzione di messaggi
+#    topic = "/imu/calibration/commands"  # Il topic su cui pubblicare il messaggio
+#    message = "start"  # comando l'avvio di produzione dei messaggi
+#    client.publish(topic, message)
+#    sr.start()
+#    # Attendo il segnale di fine elaborazione del thread
+#    print("attendo il termine di lettura del socket")
+#    end_queue.get()
+#    # fermo la produzione di messaggi
+#    print("invio messaggio di stop")
+#    message = "stop"  # # comando l'interruzione di produzione dei messaggi
+#    client.publish(topic, message)
+#    print("attendo la chiusura del thread di lettura del socket")
+#    sr.join()
+#    print("attendo la chiusura del thread di scrittura su file")
+#    rd.join()
+#    end_queue.queue.clear()
+#
+##################################################################################
+########## Fase 2: produco dati con sensore in lenta rotazione su tutti gli assi
+##################################################################################
+#    print("please slowly rotate the sensor in all directions ...")
+#    # Due thread, uno scrive su file e l'altro legge dal socket
+#    rd = threading.Thread(target=raw_data_renderer_function, args=("examples/02-imu-raw-data.csv",raw_data_queue))
+#    rd.start()
+#    sr = threading.Thread(target=read_records, args=(client_socket,raw_data_queue, end_queue, 100000 ))
+#    # avvio la produzione di messaggi
+#    topic = "/imu/calibration/commands"  # Il topic su cui pubblicare il messaggio
+#    message = "start"  # comando l'avvio di produzione dei messaggi
+#    client.publish(topic, message)
+#    sr.start()
+#    # Attendo il segnale di fine elaborazione del thread
+#    print("attendo il termine di lettura del socket")
+#    end_queue.get()
+#    # fermo la produzione di messaggi
+#    print("invio messaggio di stop")
+#    message = "stop"  # # comando l'interruzione di produzione dei messaggi
+#    client.publish(topic, message)
+#    print("attendo la chiusura del thread di lettura del socket")
+#    sr.join()
+#    print("attendo la chiusura del thread di scrittura su file")
+#    rd.join()
+#    end_queue.queue.clear()
+#
+    #################################################################################
+    ######### Fase 3: Calcolo media, varianza e deviazione standard 
+    #########         dal primo set di dati
+    #################################################################################
+    file_csv = "examples/01-imu-raw-data.csv"
+    dati = pd.read_csv(file_csv)
 
-    # Imposta le funzioni di callback
-    client.on_connect = on_connect
- 
-    # Specifica l'indirizzo IP del broker MQTT
-    broker_address = "localhost"
+# FIXME: da implementare partendo da dataframe pandas
+#    media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne = calcola_media_varianza_colonne(dati)
+#    print("Media per ogni colonna:")
+#    for i, media in enumerate(media_colonne):
+#        print(f"Colonna {i+1}: {media}")
+#    print("\nVarianza per ogni colonna:")
+#    for i, varianza in enumerate(varianza_colonne):
+#        print(f"Colonna {i+1}: {varianza}")
 
-    # Connettiti al broker MQTT
-    client.connect(broker_address, 1883, 60)
-
-    # Avvia il loop del client MQTT
-    client.loop_start()
-
-    # Creazione del socket TCP per il server
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    # Configurazione del socket
-    server_address = ('192.168.1.60', 65432)  # IP del server (vuoto per accettare connessioni da qualsiasi interfaccia di rete), porta del server
-    server_socket.bind(server_address)
-    server_socket.listen(1)  # Limita il numero massimo di connessioni pendenti
-
-    print("Server in ascolto su {}:{}".format(*server_address))
-
-    print("In attesa di connessioni...")
-    client_socket, client_address = server_socket.accept()  # Accetta la connessione del client
-    print("Connessione accettata da {}:{}".format(*client_address))
-
-#################################################################################
-######### Fase 1: produco dati con sensore fermo
-#################################################################################
-    print("please do not move the sensor ...")
-    # Due thread, uno scrive su file e l'altro legge dal socket
-    rd = threading.Thread(target=raw_data_renderer_function, args=("examples/01-imu-raw-data.csv",raw_data_queue))
-    rd.start()
-    sr = threading.Thread(target=read_records, args=(client_socket,raw_data_queue, end_queue, 20000 ))
-    # avvio la produzione di messaggi
-    topic = "/imu/calibration/commands"  # Il topic su cui pubblicare il messaggio
-    message = "start"  # comando l'avvio di produzione dei messaggi
-    client.publish(topic, message)
-    sr.start()
-    # Attendo il segnale di fine elaborazione del thread
-    print("attendo il termine di lettura del socket")
-    end_queue.get()
-    # fermo la produzione di messaggi
-    print("invio messaggio di stop")
-    message = "stop"  # # comando l'interruzione di produzione dei messaggi
-    client.publish(topic, message)
-    print("attendo la chiusura del thread di lettura del socket")
-    sr.join()
-    print("attendo la chiusura del thread di scrittura su file")
-    rd.join()
-    end_queue.queue.clear()
-
-#################################################################################
-######### Fase 2: produco dati con sensore in lenta rotazione su tutti gli assi
-#################################################################################
-    print("please slowly rotate the sensor in all directions ...")
-    # Due thread, uno scrive su file e l'altro legge dal socket
-    rd = threading.Thread(target=raw_data_renderer_function, args=("examples/02-imu-raw-data.csv",raw_data_queue))
-    rd.start()
-    sr = threading.Thread(target=read_records, args=(client_socket,raw_data_queue, end_queue, 200000 ))
-    # avvio la produzione di messaggi
-    topic = "/imu/calibration/commands"  # Il topic su cui pubblicare il messaggio
-    message = "start"  # comando l'avvio di produzione dei messaggi
-    client.publish(topic, message)
-    sr.start()
-    # Attendo il segnale di fine elaborazione del thread
-    print("attendo il termine di lettura del socket")
-    end_queue.get()
-    # fermo la produzione di messaggi
-    print("invio messaggio di stop")
-    message = "stop"  # # comando l'interruzione di produzione dei messaggi
-    client.publish(topic, message)
-    print("attendo la chiusura del thread di lettura del socket")
-    sr.join()
-    print("attendo la chiusura del thread di scrittura su file")
-    rd.join()
-    end_queue.queue.clear()
-
-#################################################################################
-######### Fase 3: Calcolo media, varianza e deviazione standard 
-#########         dal primo set di dati
-#################################################################################
-file_csv = "examples/01-imu-raw-data.csv"
-dati = leggi_dati_da_csv(file_csv)
-media_colonne, varianza_colonne, median_colonne, distribution_colonne, valori_colonne = calcola_media_varianza_colonne(dati)
-
-print("Media per ogni colonna:")
-for i, media in enumerate(media_colonne):
-    print(f"Colonna {i+1}: {media}")
-
-print("\nVarianza per ogni colonna:")
-for i, varianza in enumerate(varianza_colonne):
-    print(f"Colonna {i+1}: {varianza}")
-
-#################################################################################
-######### Fase 4: Calcolo offset e matrici di correzione 
-#########         dal secondo set di dati utilizzando media, varianza e std
-#################################################################################
-file_csv = "examples/02-imu-raw-data.csv"
-dati = leggi_dati_da_csv(file_csv)
-
-## Magnetometer
-dati_mag = np.array(dati[['MX', 'MY', 'MZ']].loc[dati['MV'] == 1])
-
-## Calcolo approssimativamente la deviazione standard del raggio
-centroid = np.array([np.mean(dati_mag[:,0]), np.mean(dati_mag[:,1]),np.mean(dati_mag[:,2])])
-dati_mag_centered = dati_mag - centroid
-distances=np.sqrt(np.sum(dati_mag_centered*dati_mag_centered, axis=1))
-dist_media = np.mean(distances)
-dist_varianza=np.var(distances)
-radius_std = dist_varianza ** (1/3)
-radius_std -= radius_std*7.9/100
-
-estimator = ImuEllipsoidEstimator(dati_mag, (radius_std ** 2))
-imu_data_mag_estimated = estimator.estimated_data
-distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
-print("distances.shape: ", distances.shape)
-dist_media = np.mean(distances)
-print("distances.mean: ", dist_media)
-dist_varianza=np.var(distances)
-print("distances.var: ", dist_varianza)
-
-print("Magnetometer Results:")
-print("Offset: ", estimator.model['offset'])
-print("Matrix: ", estimator.model['invA'])
-print("Scale Factors: ", estimator.model['scale_factors'])
-print("Scaled Matrix: ", np.dot(estimator.model['invA'], estimator.model['scale_factors']))
-print("eigen(Scaled Matrix)", eigen(np.dot(estimator.model['invA'], estimator.model['scale_factors'])))
-
-## Accelerometer
-dati_acc = np.array(dati[['AX', 'AY', 'AZ']])
-
-## Calcolo approssimativamente la deviazione standard del raggio
-centroid = np.array([np.mean(dati_acc[:,0]), np.mean(dati_acc[:,1]),np.mean(dati_acc[:,2])])
-dati_acc_centered = dati_acc - centroid
-distances=np.sqrt(np.sum(dati_acc_centered*dati_acc_centered, axis=1))
-dist_media = np.mean(distances)
-dist_varianza=np.var(distances)
-radius_std = dist_varianza ** (1/3)
-radius_std -= radius_std*7.9/100
-
-estimator = ImuEllipsoidEstimator(dati_acc, (radius_std ** 2))
-imu_data_acc_estimated = estimator.estimated_data
-distances=np.sqrt(np.sum(imu_data_acc_estimated*imu_data_acc_estimated, axis=1))
-print("distances.shape: ", distances.shape)
-dist_media = np.mean(distances)
-print("distances.mean: ", dist_media)
-dist_varianza=np.var(distances)
-print("distances.var: ", dist_varianza)
-
-print("Accelerometer Results:")
-print("Offset: ", estimator.model['offset'])
-print("Matrix: ", estimator.model['invA'])
-print("Scale Factors: ", estimator.model['scale_factors'])
-print("Scaled Matrix: ", np.dot(estimator.model['invA'], estimator.model['scale_factors']))
-print("eigen(Scaled Matrix)", eigen(np.dot(estimator.model['invA'], estimator.model['scale_factors'])))
-
-
-
-#################################################################################
-######### Fase 5: Invio offset e matrici di correzione al sensore
-#########         il sensore memorizza il tutto e li adotta per
-#########         produrre dati calibrati
-#################################################################################
-## TODO: inviare via mqtt
-
-#################################################################################
-######### Fase 6: Produco dati calibrati con sensore in lenta rotazione
-#################################################################################
-## TODO: inviare richiesta via mqtt per produrre dati calibrati 
-##       e switchare parser
-
-#################################################################################
-######### Fase 7: Verifico calibrazione e corretto allineamento assi accel e mag
-#################################################################################
-## TODO: utilizzare script R
-
-#################################################################################
-######### Fase 8: Invio correzioni e trasformazioni per allineamento assi
-#########         il sensore memorizza il tutto e li adotta per
-#########         produrre attitude con fusion dei sensori
-#################################################################################
-## TODO: utilizzare script R
-
-#################################################################################
-#################################### F I N E ####################################
-#################################################################################
-
-
+    #################################################################################
+    ######### Fase 4: Calcolo offset e matrici di correzione 
+    #########         dal secondo set di dati utilizzando media, varianza e std
+    #################################################################################
+    file_csv = "examples/02-imu-raw-data.csv"
+    estimator_mag, estimator_acc = estimate_mag_acc(file_csv)
+    
+    #################################################################################
+    ######### Fase 5: Invio offset e matrici di correzione al sensore
+    #########         il sensore memorizza il tutto e li adotta per
+    #########         produrre dati calibrati
+    #################################################################################
+    ## TODO: inviare via mqtt
+    
+    #################################################################################
+    ######### Fase 6: Produco dati calibrati con sensore in lenta rotazione
+    #################################################################################
+    ## TODO: inviare richiesta via mqtt per produrre dati calibrati 
+    ##       e switchare parser
+    
+    #################################################################################
+    ######### Fase 7: Verifico calibrazione e corretto allineamento assi accel e mag
+    #################################################################################
+    ## TODO: utilizzare script R
+    
+    #################################################################################
+    ######### Fase 8: Invio correzioni e trasformazioni per allineamento assi
+    #########         il sensore memorizza il tutto e li adotta per
+    #########         produrre attitude con fusion dei sensori
+    #################################################################################
+    ## TODO: utilizzare script R
+    
+    #################################################################################
+    #################################### F I N E ####################################
+    #################################################################################
+    
+    
     # Fermo mqtt
     client.loop_stop()
     client.disconnect()

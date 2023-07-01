@@ -1,7 +1,6 @@
 import csv
 import numpy as np
 from scipy import stats
-import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -31,12 +30,12 @@ def eigen(A):
    
 
 class ImuEllipsoidEstimator:
-   def __init__(self, dati, variance):
+   def __init__(self, dati):
      # Data
      self.dati = dati
+     self.variance = self.approx_ellipsoid_std() ** 2
      # Index Matrix
      self.IM = np.array([[1,1],[1,2],[1,3],[2,2],[2,3],[3,3],[1,0],[2,0],[3,0],[0,0]])
-     self.variance = variance
      self.n = 3
      self.psi_als = self.make_psi_als()
      self.als = self.estimate_all()
@@ -48,7 +47,31 @@ class ImuEllipsoidEstimator:
      dist_media = np.mean(distances)
      self.model['scale_factors'] = self.model['scale_factors']/dist_media
      estimated_data = self.mag_apply_estimator()
+
+     # Calculate mean and var of radius (expected mean close to 1)
+     distances=np.sqrt(np.sum(estimated_data*estimated_data, axis=1))
+     dist_media = np.mean(distances)
+     dist_variance = np.var(distances)
+     print("radius mean: ", dist_media)
+     print("radius variance: ", dist_variance)
+     assert np.isclose(dist_media, 1.0), "Il raggio medio deve essere circa uno"
+
      self.estimated_data = estimated_data
+
+   ###############################
+   ## Estimate ellipsoid std
+   ## (very approxymated)
+   ###############################
+   def approx_ellipsoid_std(self): 
+     ## Calcolo approssimativamente la deviazione standard del raggio
+     centroid = np.array([np.mean(self.dati[:,0]), np.mean(self.dati[:,1]),np.mean(self.dati[:,2])])
+     dati_centered = self.dati - centroid
+     distances=np.sqrt(np.sum(dati_centered*dati_centered, axis=1))
+     dist_media = np.mean(distances)
+     dist_varianza=np.var(distances)
+     radius_std = dist_varianza ** (1/3)
+     radius_std -= radius_std*7.9/100
+     return radius_std
 
    ###############################
    ## Form Tensor T 5xnxm
@@ -302,25 +325,48 @@ class ImuEllipsoidEstimator:
            x = np.transpose(mag_data[i, :] - np.transpose(mag_model_b))
            result[i, :] = np.transpose(np.dot(mag_model_inv_A, np.dot(mag_model['scale_factors'], x)))
        return result
-   
+
+
+def estimate_mag_acc(file_csv):
+  #################################################################################
+  ######### Fase 4: Calcolo offset e matrici di correzione
+  #########         dal secondo set di dati utilizzando media, varianza e std
+  #################################################################################
+  dati = pd.read_csv(file_csv)
+
+  ## Magnetometer
+  dati_mag = np.array(dati[['MX', 'MY', 'MZ']].loc[dati['MV'] == 1])
+
+  estimator_mag = ImuEllipsoidEstimator(dati_mag)
+
+  print("Magnetometer Results:")
+  print("Offset: ", estimator_mag.model['offset'])
+  print("Matrix: ", estimator_mag.model['invA'])
+  print("Scale Factors: ", estimator_mag.model['scale_factors'])
+  print("Scaled Matrix: ", np.dot(estimator_mag.model['invA'], estimator_mag.model['scale_factors']))
+  print("eigen(Scaled Matrix)", eigen(np.dot(estimator_mag.model['invA'], estimator_mag.model['scale_factors'])))
+
+  ## Accelerometer
+  dati_acc = np.array(dati[['AX', 'AY', 'AZ']])
+
+  estimator_acc = ImuEllipsoidEstimator(dati_acc)
+
+  print("Accelerometer Results:")
+  print("Offset: ", estimator_acc.model['offset'])
+  print("Matrix: ", estimator_acc.model['invA'])
+  print("Scale Factors: ", estimator_acc.model['scale_factors'])
+  print("Scaled Matrix: ", np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors']))
+  print("eigen(Scaled Matrix)", eigen(np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors'])))
+
+  return estimator_mag, estimator_acc
 
 def imu_ellipsoid_estimator_example():
    def prepare_data():
      ##################################################
      ### Data Preparation
      ##################################################
-     imu_data_original = pd.read_csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/imu-data-mag.csv')
-     # Axis North-East-Down
-     imu_data_NED = imu_data_original.rename(columns={'MX': 'MX2', 'MY': 'MX'})
-     imu_data_NED = imu_data_NED.rename(columns={'MX2': 'MY'})
-   
-     imu_data_NED['MY'] = -imu_data_NED['MY']
-     imu_data_NED['MX'] = -imu_data_NED['MX']
-     imu_data_NED['AY'] = -imu_data_NED['AY']
-     imu_data_NED['AZ'] = -imu_data_NED['AZ']
-     imu_data_NED['GY'] = -imu_data_NED['GY']
-     imu_data_NED['GZ'] = -imu_data_NED['GZ']
-     return imu_data_NED   
+     df = pd.read_csv('/hd/eclipse-cpp-2020-12/eclipse/workspace/my_mpu9250_thing/examples/02-imu-raw-data.csv')
+     return df   
 
    def estimate_ellipsoid(imu_data_mag):
      centroid = np.array([np.mean(imu_data_mag[:,0]), np.mean(imu_data_mag[:,1]),np.mean(imu_data_mag[:,2])])
@@ -429,22 +475,6 @@ def imu_ellipsoid_estimator_example():
        # Imposta la scala degli assi in modo da essere uniforme
        plt.show()
 
-  #   def mag_plot_data(mag_data, sphere_radius=-1, title=""):
-  #       fig = plt.figure(figsize=(8,6), dpi=300)
-  #       ax = fig.add_subplot(111, projection='3d')
-  #       ax.scatter(mag_data[:, 0], mag_data[:, 1], mag_data[:, 2], c=mag_data[:, 2], cmap=None)
-  #       ax.set_xlabel('X')
-  #       ax.set_ylabel('Y')
-  #       ax.set_zlabel('Z')
-  #   
-  #       ax.set_xlim([-1.005, 1.005])
-  #       ax.set_ylim([-1.005, 1.005])
-  #       ax.set_zlim([-1.005, 1.005])
-  #   
-  #       ax.set_title(title)
-  #       plt.show()
-   
-   
      mag_plot_data(imu_data_mag_estimated, title="imu_data_mag_estimated")
    
      print("Results:")
@@ -461,4 +491,7 @@ def imu_ellipsoid_estimator_example():
    imu_data_acc = np.array(df[['AX', 'AY', 'AZ']])
    acc_estimator = estimate_ellipsoid(imu_data_acc)
    
+#file_csv = "examples/02-imu-raw-data.csv"
+#estimator_mag, estimator_acc = estimate_mag_acc(file_csv)
+
 #imu_ellipsoid_estimator_example()

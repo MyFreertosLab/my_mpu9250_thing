@@ -6,7 +6,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-
 def leggi_dati_da_csv(file_path):
     dati = []
     with open(file_path, 'r') as file:
@@ -490,9 +489,4 @@ def imu_ellipsoid_estimator_example():
    mag_estimator = estimate_ellipsoid(imu_data_mag)
    imu_data_acc = np.array(df[['AX', 'AY', 'AZ']])
    acc_estimator = estimate_ellipsoid(imu_data_acc)
-   
-#file_csv = "examples/dati-reali/20230701-0900-02-imu-raw-data.csv"
-#file_csv = "examples/02-imu-raw-data.csv"
-#estimator_mag, estimator_acc = estimate_mag_acc(file_csv)
 
-#imu_ellipsoid_estimator_example()

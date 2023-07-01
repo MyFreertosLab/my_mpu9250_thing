@@ -59,7 +59,15 @@ typedef struct {
 	uint16_t frequenzy_hz;
 } mpu9250_config_data_t;
 
+
+static nvs_handle_t my_nvs_handle;
 static uint8_t my_mpu9250_activate_send_message = 0;
+static mpu9250_init_t mpu9250;
+static mpu9250_handle_t mpu9250_handle = &mpu9250;
+
+#define MQTT_TOPIC_COMMANDS "/imu/calibration/commands"
+#define MQTT_TOPIC_MAG_MODEL "/imu/calibration/mag/model"
+#define MQTT_TOPIC_ACC_MODEL "/imu/calibration/acc/model"
 
 static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {
@@ -69,8 +77,12 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "Connesso al broker MQTT");
-            msg_id = esp_mqtt_client_subscribe(client, "/imu/calibration/commands", 0);
-            ESP_LOGI(TAG, "Sottoscrizione al topic esempio, msg_id=%d", msg_id);
+            msg_id = esp_mqtt_client_subscribe(client, MQTT_TOPIC_COMMANDS, 0);
+            ESP_LOGI(TAG, "Sottoscrizione al topic %s. msg_id=%d",MQTT_TOPIC_COMMANDS, msg_id);
+            msg_id = esp_mqtt_client_subscribe(client, MQTT_TOPIC_MAG_MODEL, 0);
+            ESP_LOGI(TAG, "Sottoscrizione al topic %s. msg_id=%d",MQTT_TOPIC_MAG_MODEL, msg_id);
+            msg_id = esp_mqtt_client_subscribe(client, MQTT_TOPIC_ACC_MODEL, 0);
+            ESP_LOGI(TAG, "Sottoscrizione al topic %s. msg_id=%d",MQTT_TOPIC_ACC_MODEL, msg_id);
             break;
 
         case MQTT_EVENT_DISCONNECTED:
@@ -80,10 +92,19 @@ static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "Dati ricevuti sul topic %.*s : %.*s",
                      event->topic_len, event->topic, event->data_len, event->data);
-            if (strncmp(event->data, "start", strlen("start")) == 0) {
-            	my_mpu9250_activate_send_message = 1;
-            } else if (strncmp(event->data, "stop", strlen("stop")) == 0)  {
-            	my_mpu9250_activate_send_message = 0;
+            if(strncmp(event->topic, MQTT_TOPIC_COMMANDS, event->topic_len) == 0) {
+                if (strncmp(event->data, "start", strlen("start")) == 0) {
+                	my_mpu9250_activate_send_message = 1;
+                } else if (strncmp(event->data, "stop", strlen("stop")) == 0)  {
+                	my_mpu9250_activate_send_message = 0;
+                }
+            } else if(strncmp(event->topic, MQTT_TOPIC_MAG_MODEL, event->topic_len) == 0) {
+            	mpu9250_mag_save_calibration_params(mpu9250_handle, event->data, event->data_len);
+            	mpu9250_mag_load_calibration_params(mpu9250_handle);
+
+            } else if(strncmp(event->topic, MQTT_TOPIC_ACC_MODEL, event->topic_len) == 0) {
+               	mpu9250_acc_save_calibration_params(mpu9250_handle, event->data, event->data_len);
+            	mpu9250_acc_load_calibration_params(mpu9250_handle);
             }
             break;
 
@@ -115,9 +136,10 @@ esp_err_t my_mpu9250_init_flash(){
 	return err;
 }
 
-
-void my_mpu9250_task_init(mpu9250_handle_t mpu9250) {
+static void my_mpu9250_task_init(mpu9250_handle_t mpu9250) {
 	ESP_ERROR_CHECK(my_mpu9250_init_flash());
+    ESP_ERROR_CHECK(nvs_open("CAL_DATA", NVS_READWRITE, &my_nvs_handle));
+    mpu9250_handle->data.nvs_cal_data = my_nvs_handle;
 }
 
 void my_mpu9250_temperature_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
@@ -240,15 +262,9 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
     			if( ulTaskNotifyTake( pdTRUE,xMaxBlockTime ) == 1) {
      				ESP_ERROR_CHECK(mpu9250_load_data(mpu9250_handle));
     				if(counter == 0) {
-#ifdef CONFIG_ESP_DATA_CAL
-    					printf("Gyro .: [%d][%d][%d]\n", mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_z);
-    					printf("Accel : [%5.3f][%5.3f][%5.3f]\n", mpu9250_handle->data.cal_data.data_s_xyz.accel_data_x, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_y, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_z);
-    					printf("Mag ..: [%d][%d][%d][%5.3f][%5.3f][%5.3f][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.mag_data_x, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_y, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_z, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_x, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_y, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_z, mpu9250_handle->data.mag.drdy);
-#else
     					printf("Gyro .: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.raw_data.data_s_xyz.gyro_data_z);
     					printf("Accel : [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.accel_data_x, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_y, mpu9250_handle->data.raw_data.data_s_xyz.accel_data_z);
     					printf("Mag ..: [%d][%d][%d]\n", mpu9250_handle->data.raw_data.data_s_xyz.mag_data_x, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_y, mpu9250_handle->data.raw_data.data_s_xyz.mag_data_z);
-#endif
     					if(my_mpu9250_activate_send_message) {
             				esp_err_t res = mpu9250_send_message(sock, (char*)&config_data, buff, sizeof(mpu9250_config_data_t), MY_MPU9250_SENSORS_MSG_CONFIG_START, MY_MPU9250_SENSORS_MSG_CONFIG_END);
             				if(res != ESP_OK) {
@@ -292,9 +308,6 @@ void my_mpu9250_task(void *arg) {
     // Avvia MQTT client
     mqtt_app_start();
 
-	// MPU9250 Handle
-	mpu9250_init_t mpu9250;
-	mpu9250_handle_t mpu9250_handle = &mpu9250;
 	my_mpu9250_task_init(mpu9250_handle);
 
 	// Init MPU9250

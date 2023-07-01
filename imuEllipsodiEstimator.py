@@ -491,6 +491,7 @@ def imu_ellipsoid_estimator_example():
    imu_data_acc = np.array(df[['AX', 'AY', 'AZ']])
    acc_estimator = estimate_ellipsoid(imu_data_acc)
    
+#file_csv = "examples/dati-reali/20230701-0900-02-imu-raw-data.csv"
 #file_csv = "examples/02-imu-raw-data.csv"
 #estimator_mag, estimator_acc = estimate_mag_acc(file_csv)
 

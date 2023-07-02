@@ -359,6 +359,18 @@ def estimate_mag_acc(file_csv):
 
   return estimator_mag, estimator_acc
 
+def estimate_gyro(file_csv):
+  dati = pd.read_csv(file_csv)
+  dati_gyro = np.array(dati[['GX', 'GY', 'GZ']])
+  centroid = np.array([np.mean(dati_gyro[:,0]), np.mean(dati_gyro[:,1]),np.mean(dati_gyro[:,2])])
+  gyro_variances = np.array([np.var(dati_gyro[:,0]), np.var(dati_gyro[:,1]),np.var(dati_gyro[:,2])])
+  imu_data_gyro_centered = dati_gyro - centroid
+  gyro_means = np.array([np.mean(imu_data_gyro_centered[:,0]), np.mean(imu_data_gyro_centered[:,1]),np.mean(imu_data_gyro_centered[:,2])])
+  print("gyro centered means: ", gyro_means)
+  assert np.allclose(gyro_means, 0.0), "Means must be close to zero ..."
+
+  return np.identity(3, dtype=float), centroid, gyro_variances,imu_data_gyro_centered
+
 def imu_ellipsoid_estimator_example():
    def prepare_data():
      ##################################################

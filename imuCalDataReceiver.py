@@ -14,62 +14,53 @@ import pandas as pd
 import imu_ellipsoid_estimator as iee
 from imu_ellipsoid_estimator import estimate_mag_acc
 
-raw_data_queue = Queue()
+cal_data_queue = Queue()
 end_queue = Queue(maxsize=1)
 
-class RawDataFields(ctypes.Structure):
+class CalDataFields(ctypes.Structure):
     _fields_ = [
-        ("ax",   ctypes.c_short),
-        ("ay",   ctypes.c_short),
-        ("az",   ctypes.c_short),
-        ("temp_data",   ctypes.c_short),
-        ("gx",   ctypes.c_short),
-        ("gy",   ctypes.c_short),
-        ("gz",   ctypes.c_short),
-        ("mx",   ctypes.c_short),
-        ("my",   ctypes.c_short),
-        ("mz",   ctypes.c_short),
-        ("ext_1",   ctypes.c_short),
-        ("ext_2",   ctypes.c_short),
-        ("ext_3",   ctypes.c_short),
-        ("ext_4",   ctypes.c_short),
-        ("ext_5",   ctypes.c_short),
-        ("ext_6",   ctypes.c_short),
-        ("ext_7",   ctypes.c_short),
-        ("ext_8",   ctypes.c_short),
-        ("ext_9",   ctypes.c_short),
+        ("ax",   ctypes.c_float),
+        ("ay",   ctypes.c_float),
+        ("az",   ctypes.c_float),
+        ("temp_data",   ctypes.c_float),
+        ("gx",   ctypes.c_float),
+        ("gy",   ctypes.c_float),
+        ("gz",   ctypes.c_float),
+        ("mx",   ctypes.c_float),
+        ("my",   ctypes.c_float),
+        ("mz",   ctypes.c_float),
         ("mag_drdy",   ctypes.c_uint8),
         ("dummy",   ctypes.c_uint8),
+        ("dummy1",   ctypes.c_uint16),
         ("ts",   ctypes.c_uint32),
     ]
 
-def parse_raw_data_payload(raw_data):
-  fmt = "<hhhhhhhhhhhhhhhhhhhBBI"
+
+def parse_cal_data_payload(cal_data):
+  fmt = "<ffffffffffBBhI"
   fmt_size = struct.calcsize(fmt)
-  k = RawDataFields();
-  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.ext_1, k.ext_2, k.ext_3, k.ext_4, k.ext_5, k.ext_6, k.ext_7, k.ext_8, k.ext_9, k.mag_drdy, k.dummy,k.ts = struct.unpack(fmt, raw_data[:fmt_size])
+  k = CalDataFields();
+  k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.dummy, k.dummy1, k.ts = struct.unpack(fmt, cal_data[:fmt_size])
   return k
   
-def raw_data_renderer_function(file_path, in_queue):
+def cal_data_renderer_function(file_path, in_queue):
     max_qsize = 0
-    data = np.zeros((1000,10), dtype=np.int16)
+    data = np.zeros((1000,10), dtype=np.double)
     
     with open(file_path, "w") as file:
       writer = csv.writer(file, delimiter = ',')
       record = ['AX', 'AY', 'AZ', 'TEMP', 'GX', 'GY', 'GZ', 'MX', 'MY', 'MZ', 'MV', 'TS']
       writer.writerow(record)
       while True:
-        try:
-          payload = in_queue.get(timeout=10)
-          if len(payload) != 44:
-            continue
-          k = parse_raw_data_payload(payload)
-          record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.ts])
-          writer.writerow(record)
-        except queue.Empty:
-          print("Timeout scaduto senza ricevere un messaggio")
-          break
-    print("raw_data_renderer_function terminato")
+        payload = in_queue.get(timeout=10)
+        len_payload = len(payload)
+        if len_payload != 48:
+          print(f"len(cal_payoad) by {len_payload}")
+          continue
+        k = parse_cal_data_payload(payload)
+        record = np.array([k.ax, k.ay, k.az, k.temp_data, k.gx, k.gy, k.gz, k.mx, k.my, k.mz, k.mag_drdy, k.ts])
+        writer.writerow(record)
+
 
 def read_records(sock, out_queue, end_queue, num_records):
     buffer = b""
@@ -156,17 +147,14 @@ if __name__ == "__main__":
     client_socket, client_address = server_socket.accept()  # Accetta la connessione del client
     print("Connessione accettata da {}:{}".format(*client_address))
 
-#################################################################################
-######### Fase 1: produco dati con sensore fermo
-#################################################################################
     print("please do not move the sensor ...")
     # Due thread, uno scrive su file e l'altro legge dal socket
-    rd = threading.Thread(target=raw_data_renderer_function, args=("examples/01-imu-raw-data.csv",raw_data_queue))
+    rd = threading.Thread(target=cal_data_renderer_function, args=("examples/01-imu-cal-data.csv",cal_data_queue))
     rd.start()
-    sr = threading.Thread(target=read_records, args=(client_socket,raw_data_queue, end_queue, 100000 ))
+    sr = threading.Thread(target=read_records, args=(client_socket,cal_data_queue, end_queue, 100000 ))
     # avvio la produzione di messaggi
     topic = "/imu/calibration/commands"  # Il topic su cui pubblicare il messaggio
-    message = "start"  # comando l'avvio di produzione dei messaggi
+    message = "cal_start"  # comando l'avvio di produzione dei messaggi
     client.publish(topic, message)
     sr.start()
     # Attendo il segnale di fine elaborazione del thread
@@ -180,63 +168,7 @@ if __name__ == "__main__":
     sr.join()
     print("attendo la chiusura del thread di scrittura su file")
     rd.join()
-    end_queue.queue.clear()
-
-#################################################################################
-######### Fase 2: produco dati con sensore in lenta rotazione su tutti gli assi
-#################################################################################
-    print("please slowly rotate the sensor in all directions ...")
-    # Due thread, uno scrive su file e l'altro legge dal socket
-    rd = threading.Thread(target=raw_data_renderer_function, args=("examples/02-imu-raw-data.csv",raw_data_queue))
-    rd.start()
-    sr = threading.Thread(target=read_records, args=(client_socket,raw_data_queue, end_queue, 100000 ))
-    # avvio la produzione di messaggi
-    topic = "/imu/calibration/commands"  # Il topic su cui pubblicare il messaggio
-    message = "start"  # comando l'avvio di produzione dei messaggi
-    client.publish(topic, message)
-    sr.start()
-    # Attendo il segnale di fine elaborazione del thread
-    print("attendo il termine di lettura del socket")
-    end_queue.get()
-    # fermo la produzione di messaggi
-    print("invio messaggio di stop")
-    message = "stop"  # # comando l'interruzione di produzione dei messaggi
-    client.publish(topic, message)
-    print("attendo la chiusura del thread di lettura del socket")
-    sr.join()
-    print("attendo la chiusura del thread di scrittura su file")
-    rd.join()
-    end_queue.queue.clear()
-
-    #################################################################################
-    ######### Fase 3: Calcolo media, varianza e deviazione standard 
-    #########         dal primo set di dati
-    #################################################################################
-    #file_csv = "examples/01-imu-raw-data.csv"
-    #dati = pd.read_csv(file_csv)
-    # use imuCPParamsSet
-
-    #################################################################################
-    ######### Fase 4: Calcolo offset e matrici di correzione 
-    #########         dal secondo set di dati utilizzando media, varianza e std
-    #################################################################################
-    #file_csv = "examples/02-imu-raw-data.csv"
-    #estimator_mag, estimator_acc = estimate_mag_acc(file_csv)
-    # use imuCPParamsSet
-    
-    #################################################################################
-    ######### Fase 5: Invio offset e matrici di correzione al sensore
-    #########         il sensore memorizza il tutto e li adotta per
-    #########         produrre dati calibrati
-    #################################################################################
-    # use imuCPParamsSet
-    
-    #################################################################################
-    ######### Fase 6: Produco dati calibrati con sensore in lenta rotazione
-    #################################################################################
-    ## TODO: inviare richiesta via mqtt per produrre dati calibrati 
-    ##       e switchare parser
-    
+    end_queue.queue.clear()    
     #################################################################################
     ######### Fase 7: Verifico calibrazione e corretto allineamento assi accel e mag
     #################################################################################

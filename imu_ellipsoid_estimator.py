@@ -368,8 +368,9 @@ def estimate_gyro(file_csv):
   gyro_means = np.array([np.mean(imu_data_gyro_centered[:,0]), np.mean(imu_data_gyro_centered[:,1]),np.mean(imu_data_gyro_centered[:,2])])
   print("gyro centered means: ", gyro_means)
   assert np.allclose(gyro_means, 0.0), "Means must be close to zero ..."
+  gyro_covariance = np.cov(np.transpose(dati_gyro - centroid))
 
-  return np.identity(3, dtype=float), centroid, gyro_variances,imu_data_gyro_centered
+  return np.identity(3, dtype=float), centroid, gyro_variances,gyro_covariance,imu_data_gyro_centered
 
 def imu_ellipsoid_estimator_example():
    def prepare_data():

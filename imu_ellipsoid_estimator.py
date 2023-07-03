@@ -5,6 +5,7 @@ from scipy.optimize import curve_fit
 import pandas as pd
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from scipy.ndimage import measurements
 
 def leggi_dati_da_csv(file_path):
     dati = []
@@ -311,7 +312,7 @@ class ImuEllipsoidEstimator:
        result['als'] = als
        
        return result
-   
+
    def mag_apply_estimator(self):
        mag_model = self.model
        mag_data = mag_model['data_source']
@@ -358,7 +359,50 @@ def estimate_mag_acc(file_csv):
   print("eigen(Scaled Matrix)", eigen(np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors'])))
 
   return estimator_mag, estimator_acc
+   
+class ImuOffsetKalmanEstimator:
+  def __init__(self, samples):
+    self.samples = samples
+    centroid = np.array([np.mean(samples[:,0]), np.mean(samples[:,1]),np.mean(samples[:,2])])
+    self.R = np.cov(np.transpose(samples - centroid)) # Covariance Measurement noises
+    self.F = np.identity(3, dtype=float)
+    self.H = self.F # Obervation Matrix that meausure offset respect to zero
+    self.z = centroid
+    self.X = np.dot(self.F, self.z)
+    self.P = np.identity(3, dtype=float)
+    self.predX, self.predP = self.prediction()
+    self.K = self.kalman_gain_update()
+    self.apply_OffsetKalmanEstimator()
+    
+  def prediction(self):
+    predX = np.dot(self.F, self.X)
+    predP = np.dot(self.F, np.dot(self.P,np.transpose(self.F)))
+    return predX, predP
+  def measurement(self,i):
+    z = np.dot(self.H, np.transpose(self.samples[i,:]))
+    return z
+  def kalman_gain_update(self):
+    P1 = np.dot(self.predP, np.transpose(self.H))
+    P2 = np.dot(self.H, P1)+self.R
+    k = np.dot(P1, np.linalg.inv(P2))
+    return k
+  def state_update(self):
+    x = self.predX + np.dot(self.K, self.z - np.dot(self.H, self.predX))
+    P1 =  np.identity(3, dtype=float) - np.dot(self.K, self.H)
+    P2 = np.dot(self.K, np.dot(self.R, np.transpose(self.K)))
+    p = np.dot(P1, np.dot(self.predP, np.transpose(P1))) + P2
+    return x, p
 
+  def apply_OffsetKalmanEstimator(self):
+      print("iterate for: ", self.samples.shape[0])
+      for i in range(1, self.samples.shape[0]):
+        self.z = self.measurement(i)
+        self.K = self.kalman_gain_update()
+        self.X, self.P = self.state_update()
+        self.predX, self.predP = self.prediction()
+  
+        
+              
 def estimate_gyro(file_csv):
   dati = pd.read_csv(file_csv)
   dati_gyro = np.array(dati[['GX', 'GY', 'GZ']])
@@ -370,7 +414,12 @@ def estimate_gyro(file_csv):
   assert np.allclose(gyro_means, 0.0), "Means must be close to zero ..."
   gyro_covariance = np.cov(np.transpose(dati_gyro - centroid))
 
-  return np.identity(3, dtype=float), centroid, gyro_variances,gyro_covariance,imu_data_gyro_centered
+  estimator = ImuOffsetKalmanEstimator(dati_gyro)
+  print("K", estimator.K)
+  print("X", estimator.X)
+  print("P", estimator.P)
+    
+  return np.identity(3, dtype=float), centroid, gyro_variances,gyro_covariance,estimator.X,imu_data_gyro_centered
 
 def imu_ellipsoid_estimator_example():
    def prepare_data():

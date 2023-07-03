@@ -12,7 +12,7 @@ import paho.mqtt.client as mqtt
 from scipy import stats
 import pandas as pd
 import imu_ellipsoid_estimator as iee
-from imu_ellipsoid_estimator import estimate_mag_acc
+from imu_ellipsoid_estimator import estimate_mag_acc,estimate_gyro
 
 raw_data_queue = Queue()
 end_queue = Queue(maxsize=1)
@@ -182,9 +182,28 @@ if __name__ == "__main__":
     rd.join()
     end_queue.queue.clear()
 
-#################################################################################
-######### Fase 2: produco dati con sensore in lenta rotazione su tutti gli assi
-#################################################################################
+    #################################################################################
+    ######### Fase 2: Calcolo media, varianza e deviazione standard 
+    #########         dal primo set di dati
+    #################################################################################
+    #file_csv = "examples/01-imu-raw-data.csv"
+    #dati = pd.read_csv(file_csv)
+
+    ################################################
+    ## Gyroscope
+    ################################################
+    file_csv_static = "examples/01-imu-raw-data.csv"
+    gyro_model_matrix, gyro_model_bias, gyro_model_variance,gyro_model_covariance, gyro_kalman_state, _ = estimate_gyro(file_csv_static)
+    print("Gyro Matrix: ", gyro_model_matrix)
+    print("Gyro bias: ", gyro_model_bias)
+    print("Gyro kalman_state: ", gyro_kalman_state)
+    print("Gyro variance: ", gyro_model_variance)
+    print("Gyro covariance: ", gyro_model_covariance)
+ 
+
+    #################################################################################
+    ######### Fase 3: produco dati con sensore in lenta rotazione su tutti gli assi
+    #################################################################################
     print("please slowly rotate the sensor in all directions ...")
     # Due thread, uno scrive su file e l'altro legge dal socket
     rd = threading.Thread(target=raw_data_renderer_function, args=("examples/02-imu-raw-data.csv",raw_data_queue))
@@ -207,14 +226,6 @@ if __name__ == "__main__":
     print("attendo la chiusura del thread di scrittura su file")
     rd.join()
     end_queue.queue.clear()
-
-    #################################################################################
-    ######### Fase 3: Calcolo media, varianza e deviazione standard 
-    #########         dal primo set di dati
-    #################################################################################
-    #file_csv = "examples/01-imu-raw-data.csv"
-    #dati = pd.read_csv(file_csv)
-    # use imuCPParamsSet
 
     #################################################################################
     ######### Fase 4: Calcolo offset e matrici di correzione 

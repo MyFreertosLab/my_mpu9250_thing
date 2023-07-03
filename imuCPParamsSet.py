@@ -25,8 +25,8 @@ client.loop_start()
 ################################################
 ## Gyroscope
 ################################################
-file_csv_static = "examples/dati-reali/20230702-1945-01-imu-raw-data.csv"
-gyro_model_matrix, gyro_model_bias, gyro_model_variance, gyro_model_covariance,_ = estimate_gyro(file_csv_static)
+file_csv_static = "examples/01-imu-raw-data.csv"
+gyro_model_matrix, gyro_model_bias, gyro_model_variance, gyro_model_covariance,kalman_state,_ = estimate_gyro(file_csv_static)
 print("Gyro Matrix: ", gyro_model_matrix)
 print("Gyro bias: ", gyro_model_bias)
 print("Gyro variance: ", gyro_model_variance)
@@ -53,7 +53,7 @@ for row in gyro_model_matrix:
     for value in row:
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
-for value in gyro_model_bias:
+for value in kalman_state:
         print("value bias: ", value.item())
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value

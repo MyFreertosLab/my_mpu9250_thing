@@ -8,8 +8,8 @@ from imu_ellipsoid_estimator import estimate_mag_acc,estimate_gyro
 ################################################
 ## Gyroscope
 ################################################
-file_csv_static = "examples/dati-reali/20230702-1945-01-imu-raw-data.csv"
-gyro_model_matrix, gyro_model_bias, gyro_model_variance,gyro_model_covariance,_ = estimate_gyro(file_csv_static)
+file_csv_static = "examples/01-imu-raw-data.csv"
+gyro_model_matrix, gyro_model_bias, gyro_model_variance,gyro_model_covariance,kalman_state, _ = estimate_gyro(file_csv_static)
 print("Gyro Matrix: ", gyro_model_matrix)
 print("Gyro bias: ", gyro_model_bias)
 print("Gyro variance: ", gyro_model_variance)

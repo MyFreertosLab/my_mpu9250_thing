@@ -52,8 +52,6 @@ class ImuEllipsoidEstimator:
      distances=np.sqrt(np.sum(estimated_data*estimated_data, axis=1))
      dist_media = np.mean(distances)
      dist_variance = np.var(distances)
-     print("radius mean: ", dist_media)
-     print("radius variance: ", dist_variance)
      assert np.isclose(dist_media, 1.0), "Il raggio medio deve essere circa uno"
 
      self.estimated_data = estimated_data
@@ -173,9 +171,7 @@ class ImuEllipsoidEstimator:
    ## Estimate A, b, c, d
    ################################################
    def estimate_A(self, beta):
-       print("beta: ", beta, "n ", self.n)
        expanded_beta = beta[:(self.n*(self.n+1)//2)]
-       print("expandend beta: ", expanded_beta)
        expanded_matrix = np.zeros((self.n, self.n))
    
        idx = 0
@@ -203,7 +199,6 @@ class ImuEllipsoidEstimator:
    def estimate_Ae(self, A, c, d):
        denominator = np.dot(np.dot(np.transpose(c), A), c) - d
        scaling_factor = 1.0 / denominator
-       print("scaling_factor: ", scaling_factor)
        Ae = scaling_factor.item() * A
        return Ae
    
@@ -222,7 +217,6 @@ class ImuEllipsoidEstimator:
        A = self.estimate_A(beta)
        # forza la matrice ad essere definita positiva se è negativa
        factor = self.to_definite_positive_factor(A)
-       print("factor: ", factor)
        assert factor != 0, "La matrice non può essere indefinita"
        A = factor * A
        
@@ -262,25 +256,22 @@ class ImuEllipsoidEstimator:
        appo_eigen = eigen(appo)
        mag_model_V = appo_eigen[1]
        mag_model_D = np.diag(eigen(mag_model_Q)[0])
-       print("mag model u", mag_model_u)
-       print("mag model k", mag_model_k)
-       print("mag model b", mag_model_b)
-       print("mag model V", mag_model_V)
-       print("eigenvals mag model V", appo_eigen[0])
-       print("mag model D", mag_model_D)
-       print("mag model Q", mag_model_Q)
+       #print("mag model u", mag_model_u)
+       #print("mag model k", mag_model_k)
+       #print("mag model b", mag_model_b)
+       #print("mag model V", mag_model_V)
+       #print("eigenvals mag model V", appo_eigen[0])
+       #print("mag model D", mag_model_D)
+       #print("mag model Q", mag_model_Q)
        mag_model_magnetic_norm = (np.dot(np.dot(np.transpose(mag_model_b), mag_model_Q), mag_model_b) - mag_model_k).item()
-       print("mag_model_magnetic_norm", mag_model_magnetic_norm)
+       #print("mag_model_magnetic_norm", mag_model_magnetic_norm)
        P1 = np.dot(np.transpose(mag_model_V), mag_model_u)
-       print("P1: ", P1)
        P2 = np.dot(np.linalg.inv(mag_model_D), np.dot(np.transpose(mag_model_V), mag_model_u))
-       print("P2: ", P2)
        P3 = np.dot(np.transpose(P1), P2).item()
-       print("P3: ", P3)
        mag_model_alpha = (-4 * mag_model_magnetic_norm / (4 * mag_model_k - P3))
-       print("mag_model_alpha: ", mag_model_alpha)
+       #print("mag_model_alpha: ", mag_model_alpha)
        mag_model_B = np.dot(np.dot(mag_model_V, np.sqrt(mag_model_alpha * mag_model_D)) , np.transpose(mag_model_V))
-       print("mag_model_B: ", mag_model_B)
+       #print("mag_model_B: ", mag_model_B)
        mag_model_inv_A = mag_model_B
        mag_model_A = np.linalg.inv(mag_model_inv_A)
        ## START FIXME
@@ -292,7 +283,7 @@ class ImuEllipsoidEstimator:
        eigen_Q = eigen(mag_model_Q)
        factors=np.sqrt(1/eigen_Q[0])
        factors=factors/np.linalg.norm(factors, ord=2)
-       print("factors: ", factors)
+       #print("factors: ", factors)
        mag_model_scale_factors = np.diag(factors)
        ##
        ## END FIXME
@@ -339,24 +330,24 @@ def estimate_mag_acc(file_csv):
 
   estimator_mag = ImuEllipsoidEstimator(dati_mag)
 
-  print("Magnetometer Results:")
-  print("Offset: ", estimator_mag.model['offset'])
-  print("Matrix: ", estimator_mag.model['invA'])
-  print("Scale Factors: ", estimator_mag.model['scale_factors'])
-  print("Scaled Matrix: ", np.dot(estimator_mag.model['invA'], estimator_mag.model['scale_factors']))
-  print("eigen(Scaled Matrix)", eigen(np.dot(estimator_mag.model['invA'], estimator_mag.model['scale_factors'])))
+  #print("Magnetometer Results:")
+  #print("Offset: ", estimator_mag.model['offset'])
+  #print("Matrix: ", estimator_mag.model['invA'])
+  #print("Scale Factors: ", estimator_mag.model['scale_factors'])
+  #print("Scaled Matrix: ", np.dot(estimator_mag.model['invA'], estimator_mag.model['scale_factors']))
+  #print("eigen(Scaled Matrix)", eigen(np.dot(estimator_mag.model['invA'], estimator_mag.model['scale_factors'])))
 
   ## Accelerometer
   dati_acc = np.array(dati[['AX', 'AY', 'AZ']])
 
   estimator_acc = ImuEllipsoidEstimator(dati_acc)
 
-  print("Accelerometer Results:")
-  print("Offset: ", estimator_acc.model['offset'])
-  print("Matrix: ", estimator_acc.model['invA'])
-  print("Scale Factors: ", estimator_acc.model['scale_factors'])
-  print("Scaled Matrix: ", np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors']))
-  print("eigen(Scaled Matrix)", eigen(np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors'])))
+  #print("Accelerometer Results:")
+  #print("Offset: ", estimator_acc.model['offset'])
+  #print("Matrix: ", estimator_acc.model['invA'])
+  #print("Scale Factors: ", estimator_acc.model['scale_factors'])
+  #print("Scaled Matrix: ", np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors']))
+  #print("eigen(Scaled Matrix)", eigen(np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors'])))
 
   return estimator_mag, estimator_acc
    
@@ -364,7 +355,7 @@ class ImuOffsetKalmanEstimator:
   def __init__(self, samples):
     self.samples = samples
     centroid = np.array([np.mean(samples[:,0]), np.mean(samples[:,1]),np.mean(samples[:,2])])
-    self.R = np.cov(np.transpose(samples - centroid)) # Covariance Measurement noises
+    self.R = np.diag(np.diag(np.cov(np.transpose(samples - centroid)))) # Covariance Measurement noises
     self.F = np.identity(3, dtype=float)
     self.H = self.F # Obervation Matrix that meausure offset respect to zero
     self.z = centroid
@@ -372,7 +363,7 @@ class ImuOffsetKalmanEstimator:
     self.P = np.identity(3, dtype=float)
     self.predX, self.predP = self.prediction()
     self.K = self.kalman_gain_update()
-    self.apply_OffsetKalmanEstimator()
+    self.apply()
     
   def prediction(self):
     predX = np.dot(self.F, self.X)
@@ -393,33 +384,51 @@ class ImuOffsetKalmanEstimator:
     p = np.dot(P1, np.dot(self.predP, np.transpose(P1))) + P2
     return x, p
 
-  def apply_OffsetKalmanEstimator(self):
-      print("iterate for: ", self.samples.shape[0])
-      for i in range(1, self.samples.shape[0]):
-        self.z = self.measurement(i)
-        self.K = self.kalman_gain_update()
-        self.X, self.P = self.state_update()
-        self.predX, self.predP = self.prediction()
-  
-        
+  def apply(self):
+    for i in range(1, self.samples.shape[0]):
+      self.z = self.measurement(i)
+      self.K = self.kalman_gain_update()
+      self.X, self.P = self.state_update()
+      self.predX, self.predP = self.prediction()
               
-def estimate_gyro(file_csv):
+def estimate_static_gyro(file_csv):
   dati = pd.read_csv(file_csv)
   dati_gyro = np.array(dati[['GX', 'GY', 'GZ']])
   centroid = np.array([np.mean(dati_gyro[:,0]), np.mean(dati_gyro[:,1]),np.mean(dati_gyro[:,2])])
   gyro_variances = np.array([np.var(dati_gyro[:,0]), np.var(dati_gyro[:,1]),np.var(dati_gyro[:,2])])
   imu_data_gyro_centered = dati_gyro - centroid
   gyro_means = np.array([np.mean(imu_data_gyro_centered[:,0]), np.mean(imu_data_gyro_centered[:,1]),np.mean(imu_data_gyro_centered[:,2])])
-  print("gyro centered means: ", gyro_means)
   assert np.allclose(gyro_means, 0.0), "Means must be close to zero ..."
   gyro_covariance = np.cov(np.transpose(dati_gyro - centroid))
 
   estimator = ImuOffsetKalmanEstimator(dati_gyro)
-  print("K", estimator.K)
-  print("X", estimator.X)
-  print("P", estimator.P)
-    
-  return np.identity(3, dtype=float), centroid, gyro_variances,gyro_covariance,estimator.X,imu_data_gyro_centered
+  return estimator.R, centroid, gyro_variances,gyro_covariance,estimator.X,imu_data_gyro_centered
+
+def estimate_static_acc(file_csv):
+  dati = pd.read_csv(file_csv)
+  dati_acc = np.array(dati[['AX', 'AY', 'AZ']])
+  centroid = np.array([np.mean(dati_acc[:,0]), np.mean(dati_acc[:,1]),np.mean(dati_acc[:,2])])
+  acc_variances = np.array([np.var(dati_acc[:,0]), np.var(dati_acc[:,1]),np.var(dati_acc[:,2])])
+  imu_data_acc_centered = dati_acc - centroid
+  acc_means = np.array([np.mean(imu_data_acc_centered[:,0]), np.mean(imu_data_acc_centered[:,1]),np.mean(imu_data_acc_centered[:,2])])
+  assert np.allclose(acc_means, 0.0), "Means must be close to zero ..."
+  acc_covariance = np.cov(np.transpose(dati_acc - centroid))
+
+  estimator = ImuOffsetKalmanEstimator(dati_acc)
+  return estimator.R, centroid, acc_variances,acc_covariance,estimator.X,imu_data_acc_centered
+
+def estimate_static_mag(file_csv):
+  dati = pd.read_csv(file_csv)
+  dati_mag = np.array(dati[['MX', 'MY', 'MZ']])
+  centroid = np.array([np.mean(dati_mag[:,0]), np.mean(dati_mag[:,1]),np.mean(dati_mag[:,2])])
+  mag_variances = np.array([np.var(dati_mag[:,0]), np.var(dati_mag[:,1]),np.var(dati_mag[:,2])])
+  imu_data_mag_centered = dati_mag - centroid
+  mag_means = np.array([np.mean(imu_data_mag_centered[:,0]), np.mean(imu_data_mag_centered[:,1]),np.mean(imu_data_mag_centered[:,2])])
+  assert np.allclose(mag_means, 0.0), "Means must be close to zero ..."
+  mag_covariance = np.cov(np.transpose(dati_mag - centroid))
+
+  estimator = ImuOffsetKalmanEstimator(dati_mag)
+  return estimator.R, centroid, mag_variances,mag_covariance,estimator.X,imu_data_mag_centered
 
 def imu_ellipsoid_estimator_example():
    def prepare_data():
@@ -432,15 +441,11 @@ def imu_ellipsoid_estimator_example():
    def estimate_ellipsoid(imu_data_mag):
      centroid = np.array([np.mean(imu_data_mag[:,0]), np.mean(imu_data_mag[:,1]),np.mean(imu_data_mag[:,2])])
      imu_data_mag_centered = imu_data_mag - centroid
-     print("post: means == 0?", np.mean(imu_data_mag_centered[:,0]), np.mean(imu_data_mag_centered[:,1]), np.mean(imu_data_mag_centered[:,2]))
 
      distances=np.sqrt(np.sum(imu_data_mag_centered*imu_data_mag_centered, axis=1))
 
-     print("raw distances.shape: ", distances.shape)
      dist_media = np.mean(distances)
-     print("raw distances.mean: ", dist_media)
      dist_varianza=np.var(distances)
-     print("raw distances.var: ", dist_varianza)
      raw_std = dist_varianza ** (1/3)
      raw_std -= raw_std * 7.9 / 100.0
      plt.hist(distances, bins='auto', alpha=0.7, density=True)
@@ -476,16 +481,12 @@ def imu_ellipsoid_estimator_example():
      imu_data_mag_estimated = estimator.estimated_data
      distances=np.sqrt(np.sum(imu_data_mag_estimated*imu_data_mag_estimated, axis=1))
    
-     print("distances.shape: ", distances.shape)
      dist_media = np.mean(distances)
-     print("distances.mean: ", dist_media)
      dist_varianza=np.var(distances)
-     print("distances.var: ", dist_varianza)
 
      plt.hist(distances, bins='auto', alpha=0.7, density=True)
 
      xmin, xmax = plt.xlim()
-     print("distances: xmin, xmax: ", xmin, xmax)
      xlen = 100
      # Genera un array di valori x per la curva della distribuzione normale
      # Calcola i valori della funzione di densità di probabilità della distribuzione normale

@@ -12,7 +12,7 @@ import paho.mqtt.client as mqtt
 from scipy import stats
 import pandas as pd
 import imu_ellipsoid_estimator as iee
-from imu_ellipsoid_estimator import estimate_mag_acc,estimate_gyro
+from imu_ellipsoid_estimator import estimate_mag_acc,estimate_static_gyro
 
 raw_data_queue = Queue()
 end_queue = Queue(maxsize=1)
@@ -193,11 +193,13 @@ if __name__ == "__main__":
     ## Gyroscope
     ################################################
     file_csv_static = "examples/01-imu-raw-data.csv"
-    gyro_model_matrix, gyro_model_bias, gyro_model_variance,gyro_model_covariance, gyro_kalman_state, _ = estimate_gyro(file_csv_static)
+    gyro_kalman_R, gyro_model_bias, gyro_model_variance,gyro_model_covariance, gyro_kalman_state, _ = estimate_static_gyro(file_csv_static)
+    gyro_model_matrix = np.identity(3, dtype=float)
     print("Gyro Matrix: ", gyro_model_matrix)
     print("Gyro bias: ", gyro_model_bias)
     print("Gyro kalman_state: ", gyro_kalman_state)
     print("Gyro variance: ", gyro_model_variance)
+    print("Gyro kalman R: ", gyro_kalman_R)
     print("Gyro covariance: ", gyro_model_covariance)
  
 

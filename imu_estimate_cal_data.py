@@ -3,34 +3,35 @@ import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
 import pandas as pd
-from imu_ellipsoid_estimator import estimate_mag_acc,estimate_gyro
+from imu_ellipsoid_estimator import estimate_static_gyro,estimate_static_acc, estimate_static_mag
 
-file_csv = 'examples/01-imu-cal-data.csv'
-dati = pd.read_csv(file_csv)
-dati_mag = np.array(dati[['MX', 'MY', 'MZ']].loc[dati['MV'] == 1])
-dati_gyro = np.array(dati[['GX', 'GY', 'GZ']])
-dati_acc = np.array(dati[['AX', 'AY', 'AZ']])
+file_csv_static = 'examples/01-imu-cal-data.csv'
 
-means_gyro = np.array([np.mean(dati_gyro[:,0]), np.mean(dati_gyro[:,1]),np.mean(dati_gyro[:,2])])
-variance_gyro = np.array([np.var(dati_gyro[:,0]), np.var(dati_gyro[:,1]),np.var(dati_gyro[:,2])])
-print("means_gyro: ", means_gyro)
-print("variance_gyro: ", variance_gyro)
-
-gyro_model_matrix, gyro_model_bias, gyro_model_variance,gyro_model_covariance,kalman_state, _ = estimate_gyro(file_csv)
-print("Gyro Matrix: ", gyro_model_matrix)
+################################################
+## Gyroscope static
+################################################
+gyro_kalman_R, gyro_model_bias, gyro_model_variance, gyro_model_covariance,gyro_kalman_state,_ = estimate_static_gyro(file_csv_static)
 print("Gyro bias: ", gyro_model_bias)
 print("Gyro variance: ", gyro_model_variance)
+print("Gyro kalman R: ", gyro_kalman_R)
+print("Gyro kalman X: ", gyro_kalman_state)
 print("Gyro covariance: ", gyro_model_covariance)
-print("Gyro kalman_state: ", kalman_state)
 
+################################################
+## Magnetometer static
+################################################
+mag_kalman_R, _, mag_model_variance, mag_model_covariance,mag_kalman_state,_ = estimate_static_mag(file_csv_static)
+print("Mag variance: ", mag_model_variance)
+print("Mag kalman R: ", mag_kalman_R)
+print("Mag kalman X: ", mag_kalman_state)
+print("Mag covariance: ", mag_model_covariance)
 
-means_acc = np.array([np.mean(dati_acc[:,0]), np.mean(dati_acc[:,1]),np.mean(dati_acc[:,2])])
-variance_acc = np.array([np.var(dati_acc[:,0]), np.var(dati_acc[:,1]),np.var(dati_acc[:,2])])
-print("means_acc: ", means_acc)
-print("variance_acc: ", variance_acc)
-
-means_mag = np.array([np.mean(dati_mag[:,0]), np.mean(dati_mag[:,1]),np.mean(dati_mag[:,2])])
-variance_mag = np.array([np.var(dati_mag[:,0]), np.var(dati_mag[:,1]),np.var(dati_mag[:,2])])
-print("means_mag: ", means_mag)
-print("variance_mag: ", variance_mag)
+################################################
+## Accelerometer static
+################################################
+acc_kalman_R, _, acc_model_variance, acc_model_covariance,acc_kalman_state,_ = estimate_static_acc(file_csv_static)
+print("Acc variance: ", acc_model_variance)
+print("Acc kalman R: ", acc_kalman_R)
+print("Acc kalman X: ", acc_kalman_state)
+print("Acc covariance: ", acc_model_covariance)
 

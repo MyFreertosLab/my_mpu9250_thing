@@ -56,7 +56,7 @@ print("Acc kalman X: ", acc_kalman_state)
 print("Acc covariance: ", acc_model_covariance)
 
 ################################################
-## Magnetometer
+## Magnetometer (ellipsoid)
 ################################################
 file_csv = "examples/dati-reali/20230701-1053-02-imu-raw-data.csv"
 estimator_mag, estimator_acc = estimate_mag_acc(file_csv)
@@ -67,20 +67,29 @@ print("Mag Matrix: ", mag_model_matrix)
 print("Mag bias: ", mag_model_bias)
 
 ################################################
+## Accelerometer (ellipsoid)
+################################################
+acc_model_matrix = np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors'])
+acc_model_bias = estimator_acc.model['b']
+print("Acc Matrix: ", acc_model_matrix)
+print("Acc bias: ", acc_model_bias)
+
+################################################
 ## Send Data
 ################################################
 # preparo payload da inviare
 blob = b''
 
-for row in gyro_model_matrix:
+## Send Gyroscope data
+for row in gyro_model_matrix: # Identity matrix
     for value in row:
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
-for value in gyro_kalman_state:
+for value in gyro_kalman_state: # bias
         print("value bias: ", value.item())
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
-for value in np.diag(gyro_kalman_R):
+for value in np.diag(gyro_kalman_R): # variance
         print("value variance: ", value.item())
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
@@ -94,17 +103,17 @@ time.sleep(10)
 
 # preparo payload da inviare
 blob = b''
-
-for row in mag_model_matrix:
+# Send Magnetometer data
+for row in mag_model_matrix: # Ellipsoid matrix
     for value in row:
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
-for row in mag_model_bias:
+for row in mag_model_bias: # bias
     for value in row:
         print("value bias: ", value.item())
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
-for value in np.diag(mag_kalman_R):
+for value in np.diag(mag_kalman_R): # variance
         print("value variance: ", value.item())
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
@@ -118,27 +127,19 @@ print("len(blob)", len(blob))
 client.publish(mqtt_topic_mag, payload=blob)
 time.sleep(10)
 
-################################################
-## Accelerometer
-################################################
-acc_model_matrix = np.dot(estimator_acc.model['invA'], estimator_acc.model['scale_factors'])
-acc_model_bias = estimator_acc.model['b']
-print("Acc Matrix: ", acc_model_matrix)
-print("Acc bias: ", acc_model_bias)
-
 # preparo payload da inviare
 blob = b''
-
-for row in acc_model_matrix:
+## Send Accelerometer data
+for row in acc_model_matrix: # Ellipsoid matrix
     for value in row:
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
 for row in acc_model_bias:
-    for value in row:
-        print("value bias: ", value.item())
+    for value in row: # bias
+        print("value bias: ", value.item()) 
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value
-for value in np.diag(acc_kalman_R):
+for value in np.diag(acc_kalman_R): # variance
         print("value variance: ", value.item())
         binary_value = struct.pack('f', value.item())  # Converte il float in formato binario
         blob += binary_value

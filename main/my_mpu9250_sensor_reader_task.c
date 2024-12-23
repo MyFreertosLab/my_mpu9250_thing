@@ -111,9 +111,9 @@ void my_mpu9250_read_data_cycle(mpu9250_handle_t mpu9250_handle) {
         ESP_ERROR_CHECK(mpu9250_load_data(mpu9250_handle));
     	if(counter == 0) {
     	  ESP_LOGD(TAG, "Message Type: %d\n", message_type);
-    	  ESP_LOGI(TAG, "Gyro .: [%3.5f][%3.5f][%3.5f]\n", mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_z);
-    	  ESP_LOGI(TAG, "Accel : [%3.5f][%3.5f][%3.5f]\n", mpu9250_handle->data.cal_data.data_s_xyz.accel_data_x, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_y, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_z);
-    	  ESP_LOGI(TAG, "Mag ..: [%3.5f][%3.5f][%3.5f]\n", mpu9250_handle->data.cal_data.data_s_xyz.mag_data_x, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_y, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_z);
+    	  ESP_LOGD(TAG, "Gyro .: [%3.5f][%3.5f][%3.5f]\n", mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_x, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_y, mpu9250_handle->data.cal_data.data_s_xyz.gyro_data_z);
+    	  ESP_LOGD(TAG, "Accel : [%3.5f][%3.5f][%3.5f]\n", mpu9250_handle->data.cal_data.data_s_xyz.accel_data_x, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_y, mpu9250_handle->data.cal_data.data_s_xyz.accel_data_z);
+    	  ESP_LOGD(TAG, "Mag ..: [%3.5f][%3.5f][%3.5f]\n", mpu9250_handle->data.cal_data.data_s_xyz.mag_data_x, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_y, mpu9250_handle->data.cal_data.data_s_xyz.mag_data_z);
 
     	  if(false) {
 			//while(data_message_cal.type != 0) {}; // Attendo che un eventuale messaggio precedente sia stato consegnato.

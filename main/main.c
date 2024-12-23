@@ -4,7 +4,10 @@
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
-#include "my_mpu9250_task.h"
+#include "my_mpu9250_mqtt_receiver_task.h"
+#include "my_mpu9250_mqtt_sender_task.h"
+#include <my_mpu9250_sensor_reader_task.h>
+#include <my_mpu9250_sensor_writer_task.h>
 
 static const char *TAG = "my_mpu9250_thing_main";
 static uint8_t wifi_ready = 0;
@@ -65,7 +68,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 	}
 }
 
-
 void app_main(void)
 {
     ESP_LOGI(TAG, "[APP] Startup..");
@@ -75,9 +77,10 @@ void app_main(void)
     esp_log_level_set("TRANS_TCP", ESP_LOG_DEBUG);
 
     nvs_flash_init();
-    tcpip_adapter_init();
 
+    tcpip_adapter_init();
     esp_netif_init();
+
     esp_event_loop_create_default();
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &got_ip_event_handler, NULL);
 //    ESP_ERROR_CHECK( esp_event_loop_init(event_handler, NULL) );
@@ -112,7 +115,18 @@ void app_main(void)
     while(wifi_ready == 0) {
     	vTaskDelay(pdMS_TO_TICKS(2000));
     }
-    xTaskCreate(my_mpu9250_task, "my_mpu9250_task", 4096, NULL, 5, NULL);
+
+    // Avvia i task
+    xTaskCreate(&my_mpu9250_mqtt_receiver_task, "my_mpu9250_mqtt_receiver_task", 4096, NULL, 5, NULL); // ricezione dati
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    xTaskCreate(&my_mpu9250_mqtt_sender_task, "my_mpu9250_mqtt_sender_task", 4096, NULL, 5, NULL); // invio dati output
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    xTaskCreate(&my_mpu9250_sensor_writer_task, "my_mpu9250_sensor_writer_task", 4096, NULL, 5, NULL); // Ricezione dati sensore
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    ESP_LOGI(TAG, "Start Task my_mpu9250_sensor_reader_task");
+    xTaskCreate(&my_mpu9250_sensor_reader_task, "my_mpu9250_sensor_reader_task", 4096, NULL, 5, NULL); // Ricezione dati sensore
+    ESP_LOGI(TAG, "Start Task my_mpu9250_mqtt_sender_task");
 
 }
 

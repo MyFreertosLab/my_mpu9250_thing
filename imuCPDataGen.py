@@ -146,7 +146,7 @@ if __name__ == "__main__":
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # Configurazione del socket
-    server_address = ('192.168.1.60', 65432)  # IP del server (vuoto per accettare connessioni da qualsiasi interfaccia di rete), porta del server
+    server_address = ('192.168.1.61', 65432)  # IP del server (vuoto per accettare connessioni da qualsiasi interfaccia di rete), porta del server
     server_socket.bind(server_address)
     server_socket.listen(1)  # Limita il numero massimo di connessioni pendenti
 

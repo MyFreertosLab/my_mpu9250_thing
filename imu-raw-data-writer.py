@@ -9,7 +9,7 @@ import numpy as np
 import csv
 from numpy import dtype
 
-HOST = "192.168.1.60"  
+HOST = "192.168.1.61"  
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 raw_data_queue = Queue(maxsize = 1000)
 

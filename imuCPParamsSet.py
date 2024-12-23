@@ -7,7 +7,7 @@ import imu_ellipsoid_estimator as iee
 from imu_ellipsoid_estimator import estimate_mag_acc,estimate_static_gyro,estimate_static_acc,estimate_static_mag
 
 # Configurazione connessione MQTT
-mqtt_broker = "192.168.1.60"
+mqtt_broker = "192.168.1.61"
 mqtt_port = 1883
 mqtt_topic_mag = "/imu/calibration/mag/model"
 mqtt_topic_acc = "/imu/calibration/acc/model"

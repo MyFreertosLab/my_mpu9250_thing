@@ -58,10 +58,12 @@ esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
                if (strncmp(event->data, "start", strlen("start")) == 0) {
                  msg.type = MESSAGE_TYPE_COMMAND_START;
                  msg.timestamp = timestamp;
+                 ESP_LOGI(TAG, "Start command received");
                } else if (strncmp(event->data, "stop", strlen("stop")) == 0)  {
                  msg.type = MESSAGE_TYPE_COMMAND_STOP;
                  msg.timestamp = timestamp;
-               }
+                 ESP_LOGI(TAG, "Stop command received");
+              }
              } else if(strncmp(event->topic, MQTT_TOPIC_MAG_MODEL, event->topic_len) == 0) {
             	msg.type = MESSAGE_TYPE_MAG_MODEL;
                 msg.timestamp = timestamp;
